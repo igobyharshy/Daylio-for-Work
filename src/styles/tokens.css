@@ -1,0 +1,81 @@
+/* Material 3 · seed #0061A4 (blue). Mirrors the Penpot "Hi-fi v1 · Material 3 Blue" tokens. */
+:root {
+  --primary: #0061a4;
+  --on-primary: #ffffff;
+  --primary-container: #d1e4ff;
+  --on-primary-container: #001d36;
+  --inverse-primary: #9ecaff;
+  --secondary: #535f70;
+  --secondary-container: #d7e3f7;
+  --on-secondary-container: #101c2b;
+  --tertiary: #6b5778;
+  --tertiary-container: #f2daff;
+  --on-tertiary-container: #251431;
+  --error: #ba1a1a;
+  --error-container: #ffdad6;
+  --on-error-container: #410002;
+  --warning: #7c5800;
+  --warning-container: #ffdea6;
+  --on-warning-container: #271900;
+  --success: #146c2e;
+  --success-container: #b7f1b9;
+  --on-success-container: #002107;
+
+  --surface: #f8f9ff;
+  --surface-dim: #d8dae0;
+  --surface-lowest: #ffffff;
+  --surface-low: #f2f3f9;
+  --surface-container: #eceef4;
+  --surface-high: #e6e8ee;
+  --surface-highest: #e1e2e8;
+  --on-surface: #191c20;
+  --on-surface-variant: #43474e;
+  --outline: #73777f;
+  --outline-variant: #c3c7cf;
+  --inverse-surface: #2e3135;
+  --inverse-on-surface: #eff0f7;
+  --scrim: rgb(25 28 32 / 0.32);
+
+  /* state layers */
+  --hover: rgb(25 28 32 / 0.08);
+  --press: rgb(25 28 32 / 0.12);
+  --primary-hover: rgb(0 97 164 / 0.08);
+
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --elev-2: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --elev-3: 0 1px 3px rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+
+  --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1);
+
+  --topbar-h: 64px;
+  --nav-w: 280px;
+  --content-w: 1080px;
+  --sheet-w: 440px;
+}
+
+/* type scale */
+.t-dl { font: 400 57px/64px var(--font); letter-spacing: -0.25px; }
+.t-dm { font: 400 45px/52px var(--font); }
+.t-ds { font: 400 36px/44px var(--font); }
+.t-hl { font: 400 32px/40px var(--font); }
+.t-hm { font: 400 28px/36px var(--font); }
+.t-hs { font: 400 24px/32px var(--font); }
+.t-tl { font: 400 22px/28px var(--font); }
+.t-tm { font: 500 16px/24px var(--font); letter-spacing: 0.15px; }
+.t-ts { font: 500 14px/20px var(--font); letter-spacing: 0.1px; }
+.t-bl { font: 400 16px/24px var(--font); letter-spacing: 0.15px; }
+.t-bm { font: 400 14px/20px var(--font); letter-spacing: 0.25px; }
+.t-bs { font: 400 12px/16px var(--font); letter-spacing: 0.4px; }
+.t-ll { font: 500 14px/20px var(--font); letter-spacing: 0.1px; }
+.t-lm { font: 500 12px/16px var(--font); letter-spacing: 0.5px; }
+.t-ls { font: 500 11px/16px var(--font); letter-spacing: 0.5px; }
+
+.c-muted { color: var(--on-surface-variant); }
+.c-faint { color: var(--outline); }
+.c-primary { color: var(--primary); }
+.c-error { color: var(--error); }
+.c-warn { color: var(--warning); }
+.c-ok { color: var(--success); }
+.tnum { font-variant-numeric: tabular-nums; }
