@@ -1,4 +1,5 @@
 import type { Project, Task, Entry } from './types';
+import type { Checkin } from './trackers';
 import { addDays, isoDate, uid } from './time';
 
 /** Sample data modelled on the hi-fi designs, placed relative to today. */
@@ -76,15 +77,35 @@ export function buildSample(inboxId: string, now = new Date()) {
 
   const tasks = [exportReel, ravi, hero, emails, planner, standup, grade, story, sound, footer, moodboard, about, renderPrev, invoice, ...history];
 
-  const E = (e: Partial<Entry>): Entry => ({ id: uid(), body: '', whenAt: created, tags: [], taskIds: [], isSample: true, createdAt: created, ...e });
+  const E = (e: Partial<Entry>): Entry => ({ id: uid(), body: '', whenAt: created, tags: [], taskIds: [], trackerValues: {}, isSample: true, createdAt: created, ...e });
   const entries = [
-    E({ body: 'Render settings were wrong, had to re-export. Next time, check the export preset before starting the render.', whenAt: at(-1, 19, 9), tags: ['Task delay'], taskIds: [renderPrev.id] }),
-    E({ body: 'Client call ran long, pushed export.', whenAt: at(-2, 18, 30), tags: ['Task delay'], taskIds: [hero.id] }),
+    E({ body: 'Render settings were wrong, had to re-export. Next time, check the export preset before starting the render.', whenAt: at(-1, 19, 9), tags: ['Task delay'], taskIds: [renderPrev.id], trackerValues: { cause: ['Missed a step'] } }),
+    E({ body: 'Client call ran long, pushed export.', whenAt: at(-2, 18, 30), tags: ['Task delay'], taskIds: [hero.id], trackerValues: { cause: ['Scope grew'] } }),
     E({ body: "Forgot fonts weren't synced.", whenAt: at(-2, 16, 10), tags: ['Task delay'], taskIds: [story.id] }),
-    E({ body: 'Spoke too sharply to Priya in standup.', whenAt: at(-3, 10, 20), tags: ['Mistake'] }),
-    E({ body: 'Underestimated the revisions round.', whenAt: at(-3, 17, 45), tags: ['Task delay'], taskIds: [hero.id] }),
-    E({ body: "Didn't ask the client for final copy before designing.", whenAt: at(-4, 15, 0), tags: ['Mistake'] }),
+    E({ body: 'Spoke too sharply to Priya in standup.', whenAt: at(-3, 10, 20), tags: ['Mistake'], trackerValues: { severity: 3, cause: ['Stress'] } }),
+    E({ body: 'Underestimated the revisions round.', whenAt: at(-3, 17, 45), tags: ['Task delay'], taskIds: [hero.id], trackerValues: { cause: ['Rushed'] } }),
+    E({ body: "Didn't ask the client for final copy before designing.", whenAt: at(-4, 15, 0), tags: ['Mistake'], trackerValues: { severity: 4, cause: ['Unclear brief'] } }),
     E({ body: 'Blocking 30 minutes before calls to prep made the review smooth.', whenAt: at(-6, 12, 0), tags: ['Lesson'] }),
   ];
-  return { projects, tasks, entries };
+
+  // Daily check-ins for the last ~4 weeks, loosely tied to how each day went (so Patterns has something to show)
+  const checkins: Checkin[] = [];
+  const mistakeDays: [number, number, string][] = [[-8, 4, 'Rushed'], [-11, 2, 'Distracted'], [-14, 5, 'Stress'], [-17, 2, 'Unclear brief'], [-20, 4, 'Rushed'], [-23, 1, 'Missed a step']];
+  for (let day = 1; day <= 27; day++) {
+    if (day % 9 === 5) continue; // a few skipped days
+    const fin = history.filter(t => t.finishedAt && isoDate(new Date(t.finishedAt)) === d(-day));
+    const within = fin.length ? fin.filter(t => t.elapsedMs <= (t.estimateMin ?? 0) * 60000).length / fin.length : 0.5;
+    const noise = ((day * 37) % 7) / 7 - 0.4;
+    const level = Math.max(0, Math.min(4, Math.round(within * 3.2 + noise + 0.4)));
+    const sleep = 330 + level * 25 + ((day * 13) % 30);
+    const bed = (23 * 60 + (4 - level) * 18 + ((day * 7) % 25)) % 1440;
+    const energy = Math.max(1, Math.min(5, level + 1 + (day % 4 === 0 ? -1 : 0)));
+    checkins.push({ id: uid(), day: d(-day), values: { sleep_quality: level, sleep_time: sleep, bedtime: `${String(Math.floor(bed / 60)).padStart(2, '0')}:${String(bed % 60).padStart(2, '0')}`, energy }, skipped: false, isSample: true });
+  }
+  checkins.push({ id: uid(), day: today, values: { sleep_quality: 3, sleep_time: 400, bedtime: '00:15' }, skipped: false, isSample: true });
+  mistakeDays.forEach(([off, sev, cause], i) => entries.push(E({
+    body: ['Sent the wrong file version to the client.', 'Lost 20 minutes looking for the brief.', 'Snapped at a teammate during review.', 'Started before the copy was final.', 'Skipped the checklist before export.', 'Forgot to book the render machine.'][i],
+    whenAt: at(off, 15, 30), tags: ['Mistake'], trackerValues: { severity: sev, cause: [cause] },
+  })));
+  return { projects, tasks, entries, checkins };
 }

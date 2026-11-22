@@ -34,7 +34,7 @@ export function projectProgress(tasks: Task[], p: Project) {
 
 export const coverColor: Record<string, [string, string]> = {
   blue: ['var(--primary-container)', 'var(--on-primary-container)'],
-  teal: ['#cde5ff', '#001d32'],
+  teal: ['#cbe6ff', '#001e30'],
   green: ['var(--success-container)', 'var(--on-success-container)'],
   amber: ['var(--warning-container)', 'var(--on-warning-container)'],
   rose: ['#ffd9e2', '#3e001d'],

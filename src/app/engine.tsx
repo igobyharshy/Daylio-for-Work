@@ -85,8 +85,18 @@ export function Engine() {
         if (once(`ot-snooze-${x.id}-${x.snoozeUntil}`)) notify({ kind: 'reflection', title: 'Time to write it down', body: `${x.title} went over. Get back to this while it’s fresh.`, taskId: x.id }, s.notif.reflectionReminder, () => nav('/journal/review'), `snooze-${x.id}`);
       });
 
-      // End-of-day reflection reminder
       const today = todayISO();
+      // Daily check-in reminder
+      if (s.checkinRemind && now >= atTime(today, s.checkinRemind).getTime() && s.lastCheckinPrompt !== today) {
+        const c = st.checkinFor(today);
+        const hasTrackers = s.trackers.some(x => !x.archived && x.askOn === 'checkin');
+        if (hasTrackers && !c?.skipped && !Object.keys(c?.values ?? {}).length) {
+          st.updateSettings({ lastCheckinPrompt: today });
+          notify({ kind: 'info', title: 'Daily check-in', body: 'How did you sleep, and how’s your energy? Takes 10 seconds.' }, true, () => nav('/journal'), 'checkin');
+        }
+      }
+
+      // End-of-day reflection reminder
       const eod = atTime(today, s.workEnd).getTime();
       if (now >= eod && s.lastReflectionPrompt !== today) {
         const n = needsReflection(st.tasks, now).length;

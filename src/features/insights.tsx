@@ -3,14 +3,18 @@ import { useStore } from '../lib/store';
 import { Icon } from '../ui/Icon';
 import { Btn, MenuList, Popover, cx, useAnchor, Empty } from '../ui/kit';
 import { Calendar } from '../ui/pickers';
-import { insights, overrunByProject, rangeFor } from '../lib/select';
+import { insights, overrunByProject, rangeFor, type InsightRange } from '../lib/select';
+import { METRICS, buildDays, compare, findPatterns, fmtY, yLabel, type YRef } from '../lib/patterns';
+import { useNavigate } from 'react-router-dom';
 import { fmtDayShort, fmtMin, fmtMonDay, todayISO } from '../lib/time';
+import { TYPE_LABEL } from '../lib/trackers';
 
 const RANGES: Record<string, string> = { '7': 'Last 7 days', '14': 'Last 14 days', '30': 'Last 30 days', month: 'This month', custom: 'Custom range' };
 
 export function InsightsPage() {
   const st = useStore();
   const [kind, setKind] = useState('30');
+  const [tab, setTab] = useState<'overview' | 'patterns'>('overview');
   const [custom, setCustom] = useState<[string, string] | null>(null);
   const ra = useAnchor();
   const r = rangeFor(kind, custom ?? undefined);
@@ -27,7 +31,10 @@ export function InsightsPage() {
         <div className="title"><span className="t-hl">Insights</span><span className="t-bm c-muted">How well your estimates hold up</span></div>
         <div className="actions"><button className={cx('select-btn outlined state', ra.isOpen && 'active')} onClick={e => ra.open(e)}><Icon name="calendar" />{label}<Icon name="chevDown" /></button></div>
       </div>
-      {!data.list.length ? (
+      <div className="tabs" role="tablist">
+        {(['overview', 'patterns'] as const).map(k => <button key={k} role="tab" aria-selected={tab === k} className={cx('tab state', tab === k && 'on')} onClick={() => setTab(k)}>{k === 'overview' ? 'Overview' : 'Patterns'}</button>)}
+      </div>
+      {tab === 'patterns' ? <Patterns r={r} periodLabel={label} /> : !data.list.length ? (
         <Empty icon="insights" title="No finished tasks in this range yet" body="Give tasks an estimate, run the timer and tick them off. Insights shows how often you finish within your estimate." />
       ) : (
         <>
@@ -112,5 +119,80 @@ function RangeMenu({ anchor, onClose, kind, custom, onApply }: { anchor: HTMLEle
         )}
       </div>
     </Popover>
+  );
+}
+
+// ---------- Patterns (J09 / J10) ----------
+function Patterns({ r, periodLabel }: { r: InsightRange; periodLabel: string }) {
+  const st = useStore();
+  const nav = useNavigate();
+  const trackers = st.settings.trackers;
+  const active = trackers.filter(t => !t.archived);
+  const ds = useMemo(() => buildDays(r, st.tasks, st.entries, st.checkins), [r.from, r.to, st.tasks, st.entries, st.checkins]);
+  const patterns = useMemo(() => findPatterns(ds, trackers, st.settings), [ds, trackers, st.settings]);
+  const [xId, setXId] = useState<string | null>(null);
+  const [y, setY] = useState<YRef>({ kind: 'metric', id: 'within' });
+  const xa = useAnchor(), ya = useAnchor();
+  const x = active.find(t => t.id === xId) ?? active.find(t => t.askOn === 'checkin') ?? active[0];
+  if (!x) return <Empty icon="insights" title="No trackers yet" body="Add trackers like sleep or energy, then Patterns shows how they line up with your estimates." action={<Btn onClick={() => nav('/settings/trackers')}>Add trackers</Btn>} />;
+  const res = compare(x, y, ds, trackers, st.settings);
+  const max = Math.max(1, ...res.bars.map(b => b.value ?? 0));
+  const yl = yLabel(y, trackers);
+  const chartTitle = `${y.kind === 'metric' && y.id === 'within' ? 'Within estimate' : yl}, by ${x.name.toLowerCase()}`;
+  const chartSub = y.kind === 'metric' && y.id === 'within'
+    ? `Share of finished tasks that came in at or under their original estimate, grouped by ${x.askOn === 'checkin' && /sleep|bed/i.test(x.name) ? `how you slept the night before` : x.name.toLowerCase()}.`
+    : `${yl} on days grouped by ${x.name.toLowerCase()}.`;
+  const yIcon = y.kind === 'metric' ? METRICS.find(m => m.id === y.id)!.icon : trackers.find(t => t.id === y.id)?.icon ?? 'bar';
+  return (
+    <>
+      <div className="card col gap-16" style={{ padding: '20px 24px' }}>
+        <div className="row" style={{ gap: 10 }}>
+          <span className="t-bm c-muted">Compare</span>
+          <button className={cx('select-btn outlined state', xa.isOpen && 'active')} onClick={e => xa.open(e)}><Icon name={x.icon} />{x.name}<Icon name="chevDown" /></button>
+          <span className="t-bm c-muted">with</span>
+          <button className={cx('select-btn outlined state', ya.isOpen && 'active')} onClick={e => ya.open(e)}><Icon name={yIcon} />{yl}<Icon name="chevDown" /></button>
+          <span className="grow" />
+          <span className="vpill"><Icon name="event" />{res.n} {res.n === 1 ? 'day' : 'days'} with both logged</span>
+        </div>
+        <div className="col gap-2"><span className="t-tm">{chartTitle}</span><span className="t-bs c-muted">{chartSub}</span></div>
+        {res.n === 0 ? <div className="t-bm c-muted" style={{ padding: '24px 0' }}>Not enough days with both logged in {periodLabel.toLowerCase()} yet. Keep checking in and it fills up.</div> : (
+          <div className="row gap-16" style={{ alignItems: 'flex-end', paddingTop: 8 }}>
+            {res.bars.map(b => (
+              <div key={b.label} className="col grow" style={{ flexBasis: 0, gap: 6, alignItems: 'center', minWidth: 0 }} data-tip={`${b.label} · ${fmtY(y, b.value, trackers)} · ${b.days} ${b.days === 1 ? 'day' : 'days'}`}>
+                <span className="t-tm" style={{ color: b.worst ? 'var(--tertiary)' : undefined }}>{fmtY(y, b.value, trackers)}</span>
+                <div style={{ width: '100%', height: b.value == null ? 2 : Math.max(6, (b.value / max) * 140), borderRadius: b.value == null ? 0 : 8, background: b.value == null ? 'var(--outline-variant)' : b.worst ? 'var(--tertiary)' : 'var(--primary)', opacity: b.thin ? 0.55 : 1 }} />
+                <span className="t-ts ellipsis" style={{ maxWidth: '100%' }}>{b.label}</span>
+                <span className="t-bs" style={{ color: b.thin ? 'var(--tertiary)' : 'var(--on-surface-variant)' }}>{b.days} {b.days === 1 ? 'day' : 'days'}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {res.n > 0 && (
+          <div className="row gap-12" style={{ alignItems: 'flex-start', background: 'var(--primary-container)', color: 'var(--on-primary-container)', borderRadius: 12, padding: '12px 16px 12px 14px' }}>
+            <Icon name="lightbulb" />
+            <div className="col gap-2">{res.finding && <span className="t-ts">{res.finding}</span>}<span className="t-bs">{res.caveat}</span></div>
+          </div>
+        )}
+      </div>
+      <div className="card col" style={{ padding: '20px 24px 12px' }}>
+        <div className="col gap-2" style={{ paddingBottom: 4 }}><span className="t-tm">Patterns we found</span><span className="t-bs c-muted">Checked across all your trackers and task results, {periodLabel.toLowerCase()}. Strongest first.</span></div>
+        {!patterns.length && <span className="t-bm c-muted" style={{ padding: '16px 0' }}>Nothing stands out yet. Patterns appear after about a week of check-ins.</span>}
+        {patterns.map((p, i) => (
+          <div key={i} className="row" style={{ gap: 14, padding: '14px 0', borderTop: i ? '1px solid var(--outline-variant)' : undefined }}>
+            <span style={{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--secondary-container)', color: 'var(--on-secondary-container)', flex: 'none' }}><Icon name={p.x.icon} /></span>
+            <div className="col gap-2 grow"><span className="t-ts">{p.text}</span><span className="t-bs c-muted">{p.sub}</span></div>
+            <span className="vpill" style={p.strength === 'Strong' ? { background: 'var(--primary-container)', color: 'var(--on-primary-container)' } : p.strength === 'Moderate' ? { background: 'var(--secondary-container)', color: 'var(--on-secondary-container)' } : undefined}>{p.strength}</span>
+            <Btn kind="text" onClick={() => { setXId(p.x.id); setY(p.y); document.querySelector('.main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}>Compare</Btn>
+          </div>
+        ))}
+      </div>
+      {xa.isOpen && <Popover anchor={xa.el} onClose={xa.close}><MenuList width={300} onClose={xa.close} items={[{ label: 'Your trackers' }, ...active.map(t => ({ t: t.name, ic: t.icon, sel: t.id === x.id, sup: t.askOn === 'checkin' ? 'Check-in' : 'Entries', onClick: () => setXId(t.id) }))]} /></Popover>}
+      {ya.isOpen && <Popover anchor={ya.el} onClose={ya.close}><MenuList width={320} onClose={ya.close} items={[
+        { label: 'From your tasks' },
+        ...METRICS.map(m => ({ t: m.label, ic: m.icon, sel: y.kind === 'metric' && y.id === m.id, onClick: () => setY({ kind: 'metric', id: m.id }) })),
+        { divider: true }, { label: 'Your trackers' },
+        ...active.filter(t => t.id !== x.id && t.type !== 'group').map(t => ({ t: t.name, ic: t.icon, sup: TYPE_LABEL[t.type], sel: y.kind === 'tracker' && y.id === t.id, onClick: () => setY({ kind: 'tracker', id: t.id }) })),
+      ]} /></Popover>}
+    </>
   );
 }

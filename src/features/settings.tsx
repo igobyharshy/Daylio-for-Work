@@ -9,8 +9,9 @@ import { TimeInput } from '../ui/pickers';
 import { useToast } from '../ui/Toast';
 import { tagChipTone, tagDot } from '../lib/select';
 import { fmtHHMM } from '../lib/time';
+import { TrackersSettings } from './trackers';
 
-const TABS = [['work-day', 'Work day'], ['default-tags', 'Default tags'], ['statuses', 'Statuses'], ['notifications', 'Notifications'], ['account', 'Account']] as const;
+const TABS = [['work-day', 'Work day'], ['default-tags', 'Default tags'], ['trackers', 'Trackers'], ['statuses', 'Statuses'], ['notifications', 'Notifications'], ['account', 'Account']] as const;
 const CORE = ['Not started', 'In progress', 'Done'];
 
 export function SettingsPage() {
@@ -24,6 +25,7 @@ export function SettingsPage() {
       </div>
       {tab === 'work-day' && <WorkDay />}
       {tab === 'default-tags' && <DefaultTags />}
+      {tab === 'trackers' && <TrackersSettings />}
       {tab === 'statuses' && <Statuses />}
       {tab === 'notifications' && <Notifications />}
       {tab === 'account' && <Account />}

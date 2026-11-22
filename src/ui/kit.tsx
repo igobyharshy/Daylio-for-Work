@@ -73,7 +73,7 @@ export function Pill({ name, tone, menu, onClick }: { name: string; tone: Tone; 
   const [bg, fg, dot] = TONES[tone] ?? TONES.neutral;
   const El: any = onClick ? 'button' : 'span';
   return (
-    <El type={onClick ? 'button' : undefined} className={cx('pill', menu && 'menu', onClick && 'state')} style={{ background: bg, color: fg }} onClick={onClick}>
+    <El type={onClick ? 'button' : undefined} className={cx('pill', menu && 'pill-menu', onClick && 'state')} style={{ background: bg, color: fg }} onClick={onClick}>
       <span className="dot" style={{ background: dot }} />{name}{menu && <Icon name="chevDown" />}
     </El>
   );

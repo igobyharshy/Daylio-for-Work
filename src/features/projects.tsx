@@ -13,10 +13,10 @@ import { addDays, fmtHHMM, fmtMonDay, isDone, isOverdue, isoDate, todayISO } fro
 const EMOJIS = ['📁', '🎬', '🌐', '✦', '🏠', '📦', '📥', '🎨', '✏️', '📷', '🎧', '💼', '📈', '🧪', '🛠️', '📚', '🧭', '🚀', '💡', '🗂️', '🖥️', '📝', '🎯', '🌱'];
 const COVERS: Cover[] = ['blue', 'teal', 'green', 'amber', 'rose', 'purple', 'grey'];
 
-export function datesText(p: Pick<Project, 'startDate' | 'dueDate' | 'dueTime'>) {
+export function datesText(p: Pick<Project, 'startDate' | 'dueDate' | 'dueTime'>, withTime = false) {
   if (!p.startDate && !p.dueDate) return null;
   const a = p.startDate ? fmtMonDay(p.startDate) : null;
-  const b = p.dueDate ? fmtMonDay(p.dueDate) + (p.dueTime ? ', ' + fmtHHMM(p.dueTime) : '') : null;
+  const b = p.dueDate ? fmtMonDay(p.dueDate) + (withTime && p.dueTime ? ', ' + fmtHHMM(p.dueTime) : '') : null;
   return a && b ? `${a} → ${b}` : a ? `From ${a}` : `Due ${b}`;
 }
 
@@ -51,8 +51,8 @@ export function DatesPopover({ value, onSave, onClose, anchor, placement = 'belo
         <div className="row gap-12" style={{ minHeight: 48 }}>
           {box(useDue, setUseDue, 'Due date')}<span className="grow" />
           <button className={cx('select-btn outlined', active === 'due' && useDue && 'active')} disabled={!useDue} onClick={() => setActive('due')} style={{ opacity: useDue ? 1 : 0.4 }}>{fmtMonDay(due)}</button>
-          {useDue && <TimeInput value={time} onChange={setTime} label="Due time" />}
         </div>
+        {useDue && <div className="row gap-12" style={{ minHeight: 48, paddingLeft: 32 }}><span className="t-bm c-muted grow">Due time</span><TimeInput value={time} onChange={setTime} label="Due time" /></div>}
         <div className="dialog-actions">
           <Btn kind="text" onClick={() => { onSave({ startDate: null, dueDate: null, dueTime: null }); onClose(); }}>Remove</Btn>
           <span className="spacer" />
@@ -146,7 +146,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
       <input className="inline-input t-hm" placeholder="Project name" value={name} onChange={e => setName(e.target.value)} autoFocus aria-label="Project name" onKeyDown={e => { if (e.key === 'Enter') create(); }} />
       <div className="col">
         <div className="prop-row"><span className="k"><Icon name="flag" />Status</span><div className="v"><Pill name={status} tone={statusTone(status, st.settings.projectStatuses)} menu onClick={e => sa.open(e)} /></div></div>
-        <div className="prop-row"><span className="k"><Icon name="event" />Dates</span><div className="v">{datesText(dates) ? <button className="select-btn state" onClick={e => da.open(e)}><Icon name="event" />{datesText(dates)}</button> : <Btn kind="text" icon="add" onClick={e => da.open(e as any)}>Add dates</Btn>}</div></div>
+        <div className="prop-row"><span className="k"><Icon name="event" />Dates</span><div className="v">{datesText(dates) ? <button className="select-btn state" onClick={e => da.open(e)}><Icon name="event" />{datesText(dates, true)}</button> : <Btn kind="text" icon="add" onClick={e => da.open(e as any)}>Add dates</Btn>}</div></div>
         <div className="prop-row" style={{ alignItems: 'flex-start', paddingTop: 8 }}><span className="k" style={{ minHeight: 32 }}><Icon name="tag" />Tags</span><div className="v col" style={{ alignItems: 'flex-start' }}><div className="row gap-8" style={{ flexWrap: 'wrap' }}><TagsEditor value={tags} onChange={setTags} /></div>{st.settings.projectDefaultTags.length > 0 && <span className="t-bs c-muted">“{st.settings.projectDefaultTags.join('”, “')}” comes from Settings → Default tags</span>}</div></div>
       </div>
       <div className="dialog-actions"><span className="spacer" /><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!name.trim()} onClick={create}>Create project</Btn></div>
@@ -220,7 +220,7 @@ export function ProjectCard({ p, onClick, compact }: { p: Project; onClick: () =
   const st = useStore();
   const pr = projectProgress(st.tasks, p);
   return (
-    <button className="state col" onClick={onClick} draggable={compact} style={{ textAlign: 'left', borderRadius: 16, overflow: 'hidden', background: compact ? 'var(--surface-lowest)' : 'var(--surface-low)', boxShadow: compact ? '0 1px 2px rgb(0 0 0 / 0.08)' : undefined }}>
+    <button className="state col" onClick={onClick} style={{ width: '100%', textAlign: 'left', borderRadius: 16, overflow: 'hidden', background: compact ? 'var(--surface-lowest)' : 'var(--surface-low)', boxShadow: compact ? '0 1px 2px rgb(0 0 0 / 0.08)' : undefined }}>
       {compact ? (
         <div className="row gap-6 t-lm" style={{ height: 36, padding: '0 12px', background: coverColor[p.cover]?.[0], color: coverColor[p.cover]?.[1] }}><Icon name="event" size={16} />{datesText(p) ?? 'No dates'}</div>
       ) : <div style={{ height: 88, background: coverColor[p.cover]?.[0] }} />}
@@ -339,7 +339,7 @@ export function ProjectPage() {
           <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
             <TagsInline p={p} />
             <Pill name={p.status} tone={statusTone(p.status, st.settings.projectStatuses)} menu onClick={e => sa.open(e)} />
-            <button className={cx('select-btn outlined state', da.isOpen && 'active')} style={{ height: 32 }} onClick={e => da.open(e)}><Icon name="event" />{datesText(p) ?? 'Add dates'}</button>
+            <button className={cx('select-btn outlined state', da.isOpen && 'active')} style={{ height: 32 }} onClick={e => da.open(e)}><Icon name="event" />{datesText(p, true) ?? 'Add dates'}</button>
           </div>
         ) : <span className="t-bm c-muted">Tasks without a project land here. Inbox can’t be deleted.</span>}
       </div>

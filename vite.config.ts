@@ -12,7 +12,7 @@ export default defineConfig({
         name: 'Ontrack',
         short_name: 'Ontrack',
         description: 'Promise a time. Keep it. Learn when you don’t.',
-        theme_color: '#0061A4',
+        theme_color: '#6750A4',
         background_color: '#F8F9FF',
         display: 'standalone',
         start_url: '/',

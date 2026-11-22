@@ -1,3 +1,5 @@
+import type { Tracker, TrackerValues } from './trackers';
+import { DEFAULT_TRACKERS } from './trackers';
 export type ID = string;
 
 export type Cover = 'blue' | 'teal' | 'green' | 'amber' | 'rose' | 'purple' | 'grey';
@@ -54,6 +56,7 @@ export interface Entry {
   whenAt: string;
   tags: string[];
   taskIds: ID[];
+  trackerValues: TrackerValues;
   isSample: boolean;
   createdAt: string;
 }
@@ -105,6 +108,9 @@ export interface Settings {
   projectsView: 'list' | 'gallery' | 'board';
   journalView: 'calendar' | 'list';
   lastReflectionPrompt?: string; // YYYY-MM-DD
+  trackers: Tracker[];
+  checkinRemind: string | null; // HH:MM
+  lastCheckinPrompt?: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -143,4 +149,6 @@ export const DEFAULT_SETTINGS: Settings = {
   myDayView: 'list',
   projectsView: 'list',
   journalView: 'calendar',
+  trackers: DEFAULT_TRACKERS,
+  checkinRemind: '09:00',
 };

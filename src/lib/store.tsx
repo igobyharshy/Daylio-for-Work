@@ -3,7 +3,8 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { Entry, Notif, Project, Settings, Task, ID } from './types';
 import { DEFAULT_SETTINGS } from './types';
-import { entryFromRow, entryToRow, notifFromRow, notifToRow, projectFromRow, projectToRow, taskFromRow, taskToRow } from './db';
+import { checkinFromRow, checkinToRow, entryFromRow, entryToRow, notifFromRow, notifToRow, projectFromRow, projectToRow, taskFromRow, taskToRow } from './db';
+import type { Checkin, TrackerValues } from './trackers';
 import { buildSample } from './seed';
 import { elapsed, outcome, todayISO, uid, type Outcome } from './time';
 import { useToast } from '../ui/Toast';
@@ -14,6 +15,7 @@ export interface StoreState {
   tasks: Task[];
   entries: Entry[];
   notifs: Notif[];
+  checkins: Checkin[];
   settings: Settings;
   displayName: string;
   email: string;
@@ -45,6 +47,9 @@ export interface Store extends StoreState {
   setDisplayName: (name: string) => void;
   clearSample: () => Promise<void>;
   hasSample: boolean;
+  checkinFor: (day: string) => Checkin | undefined;
+  saveCheckin: (day: string, values: TrackerValues) => void;
+  skipCheckin: (day: string, skipped?: boolean) => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -54,13 +59,13 @@ export const useStore = () => {
   return s;
 };
 
-type Table = 'projects' | 'tasks' | 'journal_entries' | 'notifications';
+type Table = 'projects' | 'tasks' | 'journal_entries' | 'notifications' | 'daily_checkins';
 
 export function StoreProvider({ session, children }: { session: Session; children: ReactNode }) {
   const toast = useToast();
   const userId = session.user.id;
   const [state, setState] = useState<StoreState>({
-    loaded: false, projects: [], tasks: [], entries: [], notifs: [], settings: DEFAULT_SETTINGS,
+    loaded: false, projects: [], tasks: [], entries: [], notifs: [], checkins: [], settings: DEFAULT_SETTINGS,
     displayName: '', email: session.user.email ?? '', userId,
   });
   const stateRef = useRef(state);
@@ -77,19 +82,21 @@ export function StoreProvider({ session, children }: { session: Session; childre
 
   // ---------- load ----------
   const load = useCallback(async (initial: boolean) => {
-    const [pr, tr, er, nr, sr] = await Promise.all([
+    const [pr, tr, er, nr, sr, cr] = await Promise.all([
       supabase.from('projects').select('*').order('sort'),
       supabase.from('tasks').select('*').order('sort'),
       supabase.from('journal_entries').select('*').order('when_at', { ascending: false }),
       supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(100),
       supabase.from('user_settings').select('*').maybeSingle(),
+      supabase.from('daily_checkins').select('*').order('day', { ascending: false }).limit(400),
     ]);
-    const err = pr.error || tr.error || er.error || nr.error || sr.error;
+    const err = pr.error || tr.error || er.error || nr.error || sr.error || cr.error;
     if (err) { fail(err); return; }
     let projects = (pr.data ?? []).map(projectFromRow);
     let tasks = (tr.data ?? []).map(taskFromRow);
     let entries = (er.data ?? []).map(entryFromRow);
     const notifs = (nr.data ?? []).map(notifFromRow);
+    let checkins = (cr.data ?? []).map(checkinFromRow);
     let settingsRow = sr.data;
 
     // First run: settings row, Inbox, sample data
@@ -111,16 +118,18 @@ export function StoreProvider({ session, children }: { session: Session; childre
       const r1 = await supabase.from('projects').insert(sample.projects.map(p => ({ ...projectToRow(p), user_id: userId })));
       const r2 = r1.error ? r1 : await supabase.from('tasks').insert(sample.tasks.map(t => ({ ...taskToRow(t), user_id: userId })));
       const r3 = r2.error ? r2 : await supabase.from('journal_entries').insert(sample.entries.map(e => ({ ...entryToRow(e), user_id: userId })));
-      if (r3.error) { fail(r3.error); }
+      const r4 = r3.error ? r3 : await supabase.from('daily_checkins').upsert(sample.checkins.map(c => ({ ...checkinToRow(c), user_id: userId })), { onConflict: 'user_id,day', ignoreDuplicates: true });
+      if (r4.error) { fail(r4.error); }
       else {
         projects = [...projects, ...sample.projects];
         tasks = [...tasks, ...sample.tasks];
         entries = [...sample.entries, ...entries];
+        checkins = [...sample.checkins.filter(c => !checkins.some(x => x.day === c.day)), ...checkins];
         await supabase.from('user_settings').update({ seeded: true }).eq('user_id', userId);
       }
     }
     setState(s => ({
-      ...s, loaded: true, projects, tasks, entries, notifs,
+      ...s, loaded: true, projects, tasks, entries, notifs, checkins,
       settings: { ...DEFAULT_SETTINGS, ...(settingsRow?.data ?? {}), notif: { ...DEFAULT_SETTINGS.notif, ...(settingsRow?.data?.notif ?? {}) }, journalDefaults: { ...DEFAULT_SETTINGS.journalDefaults, ...(settingsRow?.data?.journalDefaults ?? {}) } },
       displayName: settingsRow?.display_name ?? '',
     }));
@@ -139,7 +148,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
   // realtime: merge changes from other devices
   useEffect(() => {
     const map: Record<Table, [keyof StoreState, (r: any) => any]> = {
-      projects: ['projects', projectFromRow], tasks: ['tasks', taskFromRow], journal_entries: ['entries', entryFromRow], notifications: ['notifs', notifFromRow],
+      projects: ['projects', projectFromRow], tasks: ['tasks', taskFromRow], journal_entries: ['entries', entryFromRow], notifications: ['notifs', notifFromRow], daily_checkins: ['checkins', checkinFromRow],
     };
     const ch = supabase.channel('sync-' + userId);
     (Object.keys(map) as Table[]).forEach(table => {
@@ -163,7 +172,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
   }, [userId]);
 
   // ---------- local mutation helpers ----------
-  const patchList = <K extends 'projects' | 'tasks' | 'entries' | 'notifs'>(key: K, id: ID, patch: any) =>
+  const patchList = <K extends 'projects' | 'tasks' | 'entries' | 'notifs' | 'checkins'>(key: K, id: ID, patch: any) =>
     setState(s => ({ ...s, [key]: (s[key] as any[]).map(x => (x.id === id ? { ...x, ...patch } : x)) }));
 
   // ---------- tasks ----------
@@ -274,7 +283,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
 
   // ---------- journal ----------
   const addEntry = useCallback((e: Partial<Entry>): Entry => {
-    const entry: Entry = { id: uid(), body: '', whenAt: new Date().toISOString(), tags: [], taskIds: [], isSample: false, createdAt: new Date().toISOString(), ...e };
+    const entry: Entry = { id: uid(), body: '', whenAt: new Date().toISOString(), tags: [], taskIds: [], trackerValues: {}, isSample: false, createdAt: new Date().toISOString(), ...e };
     setState(st => ({ ...st, entries: [entry, ...st.entries] }));
     write(supabase.from('journal_entries').insert({ ...entryToRow(entry), user_id: userId }));
     return entry;
@@ -323,12 +332,38 @@ export function StoreProvider({ session, children }: { session: Session; childre
       projects: st.projects.filter(p => !p.isSample),
       tasks: st.tasks.filter(t => !t.isSample).map(t => (t.projectId && sampleProjectIds.includes(t.projectId) ? { ...t, projectId: inbox?.id ?? null } : t)),
       entries: st.entries.filter(e => !e.isSample),
+      checkins: st.checkins.filter(c => !c.isSample),
     }));
     if (inbox && sampleProjectIds.length) await write(supabase.from('tasks').update({ project_id: inbox.id }).eq('is_sample', false).in('project_id', sampleProjectIds));
     await write(supabase.from('journal_entries').delete().eq('is_sample', true));
+    await write(supabase.from('daily_checkins').delete().eq('is_sample', true));
     await write(supabase.from('tasks').delete().eq('is_sample', true));
     await write(supabase.from('projects').delete().eq('is_sample', true));
   }, [write]);
+
+  // ---------- daily check-in ----------
+  const saveCheckin = useCallback((day: string, values: TrackerValues) => {
+    const existing = stateRef.current.checkins.find(c => c.day === day);
+    if (existing) {
+      patchList('checkins', existing.id, { values, skipped: false, isSample: false });
+      write(supabase.from('daily_checkins').update({ values, skipped: false, is_sample: false }).eq('id', existing.id));
+    } else {
+      const c: Checkin = { id: uid(), day, values, skipped: false, isSample: false };
+      setState(st => ({ ...st, checkins: [c, ...st.checkins] }));
+      write(supabase.from('daily_checkins').insert({ ...checkinToRow(c), user_id: userId }));
+    }
+  }, [write, userId]);
+  const skipCheckin = useCallback((day: string, skipped = true) => {
+    const existing = stateRef.current.checkins.find(c => c.day === day);
+    if (existing) {
+      patchList('checkins', existing.id, { skipped });
+      write(supabase.from('daily_checkins').update({ skipped }).eq('id', existing.id));
+    } else {
+      const c: Checkin = { id: uid(), day, values: {}, skipped, isSample: false };
+      setState(st => ({ ...st, checkins: [c, ...st.checkins] }));
+      write(supabase.from('daily_checkins').insert({ ...checkinToRow(c), user_id: userId }));
+    }
+  }, [write, userId]);
 
   const store = useMemo<Store>(() => {
     const pMap = new Map(state.projects.map(p => [p.id, p]));
@@ -340,10 +375,11 @@ export function StoreProvider({ session, children }: { session: Session; childre
       taskById: id => (id ? tMap.get(id) : undefined),
       addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime,
       addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead,
-      updateSettings, setDisplayName, clearSample,
-      hasSample: state.projects.some(p => p.isSample) || state.tasks.some(t => t.isSample) || state.entries.some(e => e.isSample),
+      updateSettings, setDisplayName, clearSample, saveCheckin, skipCheckin,
+      checkinFor: (day: string) => state.checkins.find(c => c.day === day),
+      hasSample: state.projects.some(p => p.isSample) || state.tasks.some(t => t.isSample) || state.entries.some(e => e.isSample) || state.checkins.some(c => c.isSample),
     };
-  }, [state, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
+  }, [state, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

@@ -1,4 +1,5 @@
 import type { Project, Task, Entry, Notif } from './types';
+import type { Checkin } from './trackers';
 
 // snake_case rows <-> camelCase app objects
 type Row = Record<string, any>;
@@ -32,10 +33,10 @@ export const taskToRow = (t: Partial<Task>): Row => strip({
 });
 
 export const entryFromRow = (r: Row): Entry => ({
-  id: r.id, body: r.body, whenAt: r.when_at, tags: r.tags ?? [], taskIds: r.task_ids ?? [], isSample: r.is_sample, createdAt: r.created_at,
+  id: r.id, body: r.body, whenAt: r.when_at, tags: r.tags ?? [], taskIds: r.task_ids ?? [], trackerValues: r.tracker_values ?? {}, isSample: r.is_sample, createdAt: r.created_at,
 });
 export const entryToRow = (e: Partial<Entry>): Row => strip({
-  id: e.id, body: e.body, when_at: e.whenAt, tags: e.tags, task_ids: e.taskIds, is_sample: e.isSample, created_at: e.createdAt,
+  id: e.id, body: e.body, when_at: e.whenAt, tags: e.tags, task_ids: e.taskIds, tracker_values: e.trackerValues, is_sample: e.isSample, created_at: e.createdAt,
 });
 
 export const notifFromRow = (r: Row): Notif => ({
@@ -44,6 +45,9 @@ export const notifFromRow = (r: Row): Notif => ({
 export const notifToRow = (n: Partial<Notif>): Row => strip({
   id: n.id, kind: n.kind, title: n.title, body: n.body, task_id: n.taskId, read_at: n.readAt, created_at: n.createdAt,
 });
+
+export const checkinFromRow = (r: Row): Checkin => ({ id: r.id, day: r.day, values: r.values ?? {}, skipped: r.skipped, isSample: r.is_sample });
+export const checkinToRow = (c: Partial<Checkin>): Row => strip({ id: c.id, day: c.day, values: c.values, skipped: c.skipped, is_sample: c.isSample });
 
 function strip(o: Row): Row {
   const r: Row = {};

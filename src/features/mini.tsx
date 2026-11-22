@@ -59,7 +59,7 @@ function MiniTimer({ onClose }: { onClose: () => void }) {
         <IBtn icon="open" label="Open in Ontrack" onClick={() => { window.focus(); ui.openTask(t.id); }} />
         <IBtn icon="close" label="Close mini timer" onClick={onClose} />
       </div>
-      <Ring pct={amber ? 100 : pct} size={150} stroke={8} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? '#f5c76b' : 'var(--surface-lowest)'}>
+      <Ring pct={amber ? 100 : pct} size={150} stroke={8} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? '#ffb1c8' : 'var(--surface-lowest)'}>
         <div className="col" style={{ alignItems: 'center' }}>
           <span className="tnum" style={{ font: '400 28px/36px var(--font)', color: amber ? 'var(--warning)' : 'var(--primary)' }}>{t.estimateMin ? fmtTimer(rem) : fmtTimer(elapsed(t, now))}</span>
           <span className="t-bs">{!t.estimateMin ? 'elapsed' : amber ? 'over estimate' : `left of ${fmtMin(totalEstimateMin(t))}`}</span>

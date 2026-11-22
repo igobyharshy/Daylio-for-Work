@@ -6,6 +6,8 @@ import type { Entry, ID, Task } from '../lib/types';
 import { Icon } from '../ui/Icon';
 import { Btn, Chip, Confirm, Dialog, Field, IBtn, MenuList, Popover, Seg, Tag, cx, useAnchor, Empty } from '../ui/kit';
 import { DateTimePicker, DuePicker } from '../ui/pickers';
+import { CheckinCard, DayCheckinCard, EntryTrackerPills, EntryTrackersEditor } from './trackers';
+import { fmtValue, type TrackerValues } from '../lib/trackers';
 import { useToast } from '../ui/Toast';
 import { needsReflection, tagChipTone, tagDot, tagTone } from '../lib/select';
 import {
@@ -81,20 +83,21 @@ export function EntryDialog({ draft, onClose }: { draft: EntryDraft; onClose: ()
   const [tags, setTags] = useState<string[]>(draft.tags ?? (defTag ? [defTag] : []));
   const [when, setWhen] = useState(draft.whenAt ?? new Date().toISOString());
   const [taskIds, setTaskIds] = useState<ID[]>(draft.taskIds ?? []);
+  const [tv, setTv] = useState<TrackerValues>({});
   const wa = useAnchor();
   const isToday = isoDate(new Date(when)) === todayISO();
   const save = () => {
     if (!body.trim()) return;
-    st.addEntry({ body: body.trim(), tags, whenAt: when, taskIds });
+    st.addEntry({ body: body.trim(), tags, whenAt: when, taskIds, trackerValues: tv });
     taskIds.forEach(id => { const t = st.taskById(id); if (t && t.reflection === 'needed') st.updateTask(id, { reflection: 'done' }); });
     toast.show('Journal entry saved', { icon: 'checkCircle', duration: 3000 });
     onClose();
   };
   const noteText = source === 'manual' ? 'Default tag for manual entries (change in Settings)' : 'Default tag for entries written from a task (change in Settings)';
   return (
-    <Dialog onClose={onClose} width={640} label="New journal entry">
+    <Dialog onClose={onClose} width={640} label="New journal entry" className="dlg-low">
       <div className="row gap-12"><Icon name="draw" style={{ color: 'var(--tertiary)' }} /><span className="t-hs grow">New journal entry</span><IBtn icon="close" label="Close" onClick={onClose} /></div>
-      <Field multi rows={4} label="What happened, and what will you do differently?" value={body} onChange={setBody} autoFocus bg="var(--surface-high)"
+      <Field multi rows={4} label="What happened, and what will you do differently?" value={body} onChange={setBody} autoFocus bg="var(--surface-low)"
         onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); }} />
       <div className="row gap-8" style={{ alignItems: 'flex-start' }}>
         <LabelCol>Tags</LabelCol>
@@ -109,8 +112,10 @@ export function EntryDialog({ draft, onClose }: { draft: EntryDraft; onClose: ()
       </div>
       <div className="row gap-8" style={{ alignItems: 'flex-start' }}>
         <LabelCol h={40}>Linked tasks</LabelCol>
-        <LinkedTasks value={taskIds} onChange={setTaskIds} bg="var(--surface-high)" />
+        <LinkedTasks value={taskIds} onChange={setTaskIds} bg="var(--surface-low)" />
       </div>
+      <div className="divider" />
+      <EntryTrackersEditor tags={tags} values={tv} onChange={setTv} />
       <div className="dialog-actions"><span className="spacer" /><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!body.trim()} onClick={save}>Save</Btn></div>
       {wa.isOpen && <Popover anchor={wa.el} onClose={wa.close} placement="right"><DateTimePicker value={when} onDone={iso => { setWhen(iso); wa.close(); }} onClear={() => { setWhen(new Date().toISOString()); wa.close(); }} /></Popover>}
     </Dialog>
@@ -125,6 +130,7 @@ export function WhatHappenedDialog({ t, onClose }: { t: Task; onClose: () => voi
   const [body, setBody] = useState('');
   const tag = st.settings.journalDefaults.overEstimate;
   const [tags, setTags] = useState<string[]>(tag ? [tag] : []);
+  const [tv, setTv] = useState<TrackerValues>({});
   const extend = (m: number) => {
     st.reEstimate(t.id, m);
     toast.show(`Added ${m} min. Insights still score the original ${fmtMin(t.estimateMin ?? 0)}.`, { icon: 'hourglass', duration: 4000 });
@@ -138,7 +144,7 @@ export function WhatHappenedDialog({ t, onClose }: { t: Task; onClose: () => voi
     onClose();
   };
   const save = () => {
-    st.addEntry({ body: body.trim(), tags, taskIds: [t.id] });
+    st.addEntry({ body: body.trim(), tags, taskIds: [t.id], trackerValues: tv });
     st.updateTask(t.id, { reflection: 'done', snoozeUntil: null });
     toast.show('Saved to your journal', { icon: 'checkCircle', duration: 3000 });
     onClose();
@@ -157,6 +163,7 @@ export function WhatHappenedDialog({ t, onClose }: { t: Task; onClose: () => voi
       </div>
       <Field multi rows={3} label="What happened?" placeholder="Write a sentence or two…" value={body} onChange={setBody} bg="var(--surface-high)" />
       <div className="row gap-8"><span className="t-ll c-muted">Tag</span><TagAdder value={tags} onChange={setTags} /></div>
+      <EntryTrackersEditor tags={tags} values={tv} onChange={setTv} compact />
       <div className="dialog-actions">
         <Btn kind="text" icon="snooze" onClick={later}>Remind me later</Btn>
         <span className="spacer" />
@@ -197,11 +204,37 @@ export function EntryDrawer({ e }: { e: Entry }) {
         </div>
         <div className="col gap-8"><span className="t-ts c-muted">Tags</span><div className="row gap-8" style={{ flexWrap: 'wrap' }}><TagAdder value={e.tags} onChange={tags => st.updateEntry(e.id, { tags })} /></div></div>
         <div className="col gap-8"><span className="t-ts c-muted">Linked tasks</span><LinkedTasks value={e.taskIds} onChange={taskIds => st.updateEntry(e.id, { taskIds })} bg="var(--surface-low)" /></div>
+        <DrawerTrackers e={e} />
+        <DayCheckinCard day={isoDate(new Date(e.whenAt))} />
       </div>
       <div className="sheet-foot"><span className="t-bs c-muted grow">Written {fmtDayComma(e.createdAt)} · {fmtClock(e.createdAt)}</span><IBtn icon="trash" label="Delete entry" onClick={() => setDel(true)} /></div>
       {wa.isOpen && <Popover anchor={wa.el} onClose={wa.close} placement="left"><DateTimePicker value={e.whenAt} onDone={iso => { st.updateEntry(e.id, { whenAt: iso }); wa.close(); }} /></Popover>}
       {del && <Confirm title="Delete this entry?" body="This journal entry will be deleted. Linked tasks are not affected." confirm="Delete" danger onClose={() => setDel(false)} onConfirm={() => { ui.openEntry(null); st.deleteEntry(e.id); }} />}
     </aside>
+  );
+}
+
+function DrawerTrackers({ e }: { e: Entry }) {
+  const st = useStore();
+  const [edit, setEdit] = useState(false);
+  const asked = st.settings.trackers.filter(t => !t.archived && t.askOn !== 'checkin' && (e.trackerValues[t.id] != null || t.askOn === 'every' || (t.askOn === 'tagged' && t.tags.some(x => e.tags.includes(x)))));
+  if (!asked.length) return null;
+  return (
+    <div className="col gap-8">
+      <div className="row"><span className="t-ts c-muted grow">Trackers</span><Btn kind="text" onClick={() => setEdit(!edit)}>{edit ? 'Done' : 'Edit'}</Btn></div>
+      {edit ? <EntryTrackersEditor tags={e.tags} values={e.trackerValues} onChange={v => st.updateEntry(e.id, { trackerValues: v })} compact /> : asked.map(t => {
+        const v = e.trackerValues[t.id];
+        return (
+          <button key={t.id} className="row gap-12 state" style={{ minHeight: 32, borderRadius: 8, textAlign: 'left' }} onClick={() => setEdit(true)}>
+            <span className="t-bm grow">{t.name}</span>
+            {v == null || (Array.isArray(v) && !v.length) ? <span className="t-bm c-faint">Not logged</span>
+              : t.type === 'group' ? <span className="row gap-6">{(v as string[]).map(o => <Chip key={o} tone={['var(--secondary-container)', 'var(--on-secondary-container)']}>{o}</Chip>)}</span>
+              : <Chip tone={['var(--secondary-container)', 'var(--on-secondary-container)']}>{fmtValue(t, v)}</Chip>}
+            <Icon name="edit" size={18} style={{ color: 'var(--on-surface-variant)' }} />
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -229,6 +262,7 @@ export function JournalPage() {
         </div>
       </div>
       {filter && <div className="row gap-8"><Chip icon="tag" tone={tagChipTone(filter)} onRemove={() => setFilter(null)}>{filter}</Chip></div>}
+      <CheckinCard />
       {view === 'calendar' ? <JournalCalendar month={month} setMonth={setMonth} entries={entries} /> : (
         entries.length ? (
           <div className="list">
@@ -257,6 +291,7 @@ function EntryRow({ e }: { e: Entry }) {
           <span>{fmtDayShort(e.whenAt)}</span>
           {linked.length ? <span className="m"><Icon name="subdir" />{linked[0].title}{linked.length > 1 ? ` +${linked.length - 1}` : ''}</span> : <span className="c-faint">No task linked</span>}
           {e.tags.map(t => <Tag key={t} kind={tagTone(t)} icon="tag">{t}</Tag>)}
+          <EntryTrackerPills e={e} />
         </div>
       </div>
       <Icon name="chevRight" style={{ color: 'var(--on-surface-variant)' }} />
@@ -336,9 +371,10 @@ export function ReviewPage() {
   const sel = queue.find(t => t.id === selId) ?? queue[0];
   const [body, setBody] = useState('');
   const [tags, setTags] = useState<string[]>([st.settings.journalDefaults.review]);
+  const [tv, setTv] = useState<TrackerValues>({});
   const sa = useAnchor();
   const [custom, setCustom] = useState(false);
-  useEffect(() => { setBody(''); setTags([st.settings.journalDefaults.review]); }, [sel?.id]);
+  useEffect(() => { setBody(''); setTags([st.settings.journalDefaults.review]); setTv({}); }, [sel?.id]);
   const idx = sel ? queue.indexOf(sel) : -1;
   const next = () => { const n = queue[idx + 1] ?? queue.find(t => t.id !== sel?.id); setSelId(n?.id ?? null); };
   const snooze = (until: Date) => { if (!sel) return; st.updateTask(sel.id, { snoozeUntil: until.toISOString() }); toast.show(`Snoozed until ${relDay(isoDate(until)) === 'today' ? '' : cap(relDay(isoDate(until))) + ' '}${fmtClock(until)}`, { icon: 'snooze' }); next(); };
@@ -390,12 +426,13 @@ export function ReviewPage() {
           )}
           <Field multi rows={4} label="What happened?" placeholder="Write a sentence or two…" value={body} onChange={setBody} bg="var(--surface-lowest)" autoFocus />
           <div className="row gap-8"><span className="t-ll c-muted">Tag</span><TagAdder value={tags} onChange={setTags} /></div>
+          <EntryTrackersEditor tags={tags} values={tv} onChange={setTv} compact />
           <div className="dialog-actions" style={{ paddingTop: 0 }}>
             <Btn kind="text" icon="snooze" onClick={e => sa.open(e)}>Snooze</Btn>
             <span className="spacer" />
             <Btn kind="outlined" onClick={next} disabled={queue.length < 2}>Next</Btn>
             <Btn icon="check" disabled={!body.trim()} onClick={() => {
-              st.addEntry({ body: body.trim(), tags, taskIds: [sel.id], whenAt: sel.finishedAt ?? new Date().toISOString() });
+              st.addEntry({ body: body.trim(), tags, taskIds: [sel.id], whenAt: sel.finishedAt ?? new Date().toISOString(), trackerValues: tv });
               st.updateTask(sel.id, { reflection: 'done', snoozeUntil: null });
               toast.show('Saved to your journal', { icon: 'checkCircle', duration: 2500 });
               if (queue.length <= 1) nav('/journal'); else next();

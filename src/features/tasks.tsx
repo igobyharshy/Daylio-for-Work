@@ -8,7 +8,7 @@ import { DuePicker, EstimateDialog, DateTimePicker, remindOptions } from '../ui/
 import { useToast } from '../ui/Toast';
 import {
   dueAt, dueLabel, elapsed, fmtClock, fmtMin, fmtMs, fmtTimer, isDone, isOverEstimate, isOverdue, outcome, relDay, remainingMs,
-  startBy, todayISO, totalEstimateMin, cap, isoDate, atTime,
+  startBy, todayISO, totalEstimateMin, cap, isoDate, atTime, fmtHHMM,
 } from '../lib/time';
 import { avgOverrunMin } from '../lib/select';
 import { Ring } from '../ui/kit';
@@ -51,12 +51,12 @@ export function useTaskActions() {
     if (o.diffMin != null && o.diffMin > 0) parts.push(`${fmtMin(o.diffMin)} over estimate`);
     else if (o.diffMin != null && o.diffMin < 0) parts.push(`${fmtMin(-o.diffMin)} under estimate`);
     if (o.earlyMin != null && o.earlyMin >= 5) parts.push(`${fmtMin(o.earlyMin)} early`);
+    if (o.lateMin != null && o.lateMin > 0) parts.push(`${fmtMin(o.lateMin)} late`);
     const over = (o.diffMin ?? 0) > 0 || (o.lateMin ?? 0) > 0;
     toast.show(parts.join(' · '), {
       icon: over ? 'warn' : 'checkCircle',
-      action: over && !wasOver ? { label: 'What happened?', onClick: () => ui.newEntry({ taskIds: [t.id], source: (o.diffMin ?? 0) > 0 ? 'overEstimate' : 'late' }) }
-        : over ? { label: 'What happened?', onClick: () => ui.newEntry({ taskIds: [t.id], source: 'overEstimate' }) }
-        : { label: 'Undo', onClick: () => st.reopenTask(t.id) },
+      action: over ? { label: 'What happened?', onClick: () => ui.newEntry({ taskIds: [t.id], source: wasOver || (o.diffMin ?? 0) > 0 ? 'overEstimate' : 'late' }) } : undefined,
+      action2: { label: 'Undo', onClick: () => st.reopenTask(t.id) },
     });
   };
   const toggleDone = (t: Task) => { if (isDone(t)) st.reopenTask(t.id); else finish(t); };
@@ -91,7 +91,7 @@ export function TaskRow({ t, showProject = true, showSun = false, onDragStart, d
   if (!showProject && showSun && inMyDay) meta.push(<span className="m primary"><Icon name="sunFill" />My Day</span>);
   if (t.steps.length) meta.push(<span className="m">{stepsDone} of {t.steps.length}</span>);
   if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m"><Icon name="bell" />{relDay(isoDate(new Date(t.remindAt))) === 'today' ? '' : cap(relDay(isoDate(new Date(t.remindAt)))) + ' '}{fmtClock(t.remindAt)}</span>);
-  if (!done && t.dueDate) meta.push(<span className={cx('m', overdue && 'err')}>{overdue ? 'Overdue · ' + dueLabel(t)!.replace('Due ', '') : dueLabel(t)}</span>);
+  if (!done && t.dueDate) meta.push(<span className={cx('m', overdue && 'err')}>{overdue ? (t.dueDate === todayISO() && t.dueTime ? `Overdue since ${fmtHHMM(t.dueTime)}` : `Overdue · was due ${relDay(t.dueDate)}`) : dueLabel(t)}</span>);
   if (!done && sb && !t.firstStartedAt && sb.getTime() > now && isoDate(sb) === todayISO()) meta.push(<span className="m">Start by {fmtClock(sb)}</span>);
 
   return (
@@ -142,7 +142,7 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   else if (!running && sbEnd) meta.push(<span className="m">Paused</span>);
   return (
     <div className={cx('run-card', amber && 'amber')}>
-      <Ring pct={amber ? 100 : pct} size={64} stroke={6} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? '#f5c76b' : 'var(--surface-lowest)'}>
+      <Ring pct={amber ? 100 : pct} size={64} stroke={6} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? '#ffb1c8' : 'var(--surface-lowest)'}>
         <Icon name={amber ? 'warn' : 'hourglass'} style={{ color: amber ? 'var(--warning)' : 'var(--primary)' }} />
       </Ring>
       <button className="col grow" style={{ textAlign: 'left', gap: 4, minWidth: 0 }} onClick={() => ui.openTask(t.id)}>
