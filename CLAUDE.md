@@ -4,7 +4,7 @@
 - Colour meaning: tertiary/pink = estimate ran out / over; error/red = deadline passed or Mistake; primary = running, under estimate.
 - Product rules: one countdown (the estimate); Insights score against the ORIGINAL estimate; re-estimates are logged; Due never counts down; Inbox can't be deleted; new tasks default due today; tasks added from My Day go to My Day + Inbox.
 - Auth: email + password only, no sign-up. Never commit secrets; Supabase publishable key lives in Vercel env vars.
-- Do not commit or push unless asked. Work on a feature branch (Vercel gives a preview URL); production is the branch `build/ontrack-v1` → ontrack-harshy.vercel.app.
+- Do not commit or push unless asked. Work on a feature branch (Vercel gives a preview URL); production is the branch `main` → ontrack-harshy1.vercel.app (also daylioforwork.vercel.app). Previews use the ontrack-test database.
 
 ## Harshy's real data lives in production — never lose it
 - Code deploys never touch data; data lives only in Supabase. Every update must keep working with the data already there.
