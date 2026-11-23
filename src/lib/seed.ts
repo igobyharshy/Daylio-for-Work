@@ -10,7 +10,7 @@ export function buildSample(inboxId: string, now = new Date()) {
   const created = new Date().toISOString();
 
   const P = (p: Partial<Project>): Project => ({
-    id: uid(), name: '', emoji: '📁', cover: 'blue', status: 'Not started', startDate: null, dueDate: null, dueTime: null,
+    id: uid(), name: '', emoji: '📁', cover: 'blue', status: 'Not started', archived: false, startDate: null, dueDate: null, dueTime: null,
     tags: [], isInbox: false, sort: 0, isSample: true, createdAt: created, ...p,
   });
   const motion = P({ name: 'Motion reel', emoji: '🎬', cover: 'blue', status: 'In progress', startDate: d(-10), dueDate: d(18), dueTime: '18:00', tags: ['Work', 'Motion design'], sort: 1 });
@@ -24,7 +24,7 @@ export function buildSample(inboxId: string, now = new Date()) {
   const T = (t: Partial<Task>): Task => ({
     id: uid(), projectId: inboxId, title: '', status: 'Not started', dueDate: null, dueTime: null, estimateMin: null,
     reEstimates: [], myDayDate: null, remindAt: null, remindedAt: null, steps: [], note: '', elapsedMs: 0,
-    runStartedAt: null, firstStartedAt: null, finishedAt: null, reflection: 'none', snoozeUntil: null,
+    runStartedAt: null, pausedAt: null, firstStartedAt: null, finishedAt: null, reflection: 'none', snoozeUntil: null,
     sort: ++sort, isSample: true, createdAt: created, ...t,
   });
   const step = (title: string, done = false) => ({ id: uid(), title, done });

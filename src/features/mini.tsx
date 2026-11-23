@@ -45,7 +45,7 @@ function MiniTimer({ onClose }: { onClose: () => void }) {
   const st = useStore();
   const ui = useUI();
   const act = useTaskActions();
-  const t = activeTask(st.tasks);
+  const t = activeTask(st.tasks, st.projects);
   const now = useNow(1000);
   useEffect(() => { if (!t) { const id = setTimeout(onClose, 4000); return () => clearTimeout(id); } }, [t, onClose]);
   if (!t) return <div className="mini"><Icon name="checkCircle" size={40} /><span className="t-ts">Nothing running</span></div>;
@@ -67,7 +67,8 @@ function MiniTimer({ onClose }: { onClose: () => void }) {
         </div>
       </Ring>
       <span className="t-bs ellipsis" style={{ maxWidth: 200 }}>{t.title}</span>
-      <div className="done" style={{ position: 'absolute', bottom: 10 }}>
+      <div className="done row gap-8" style={{ position: 'absolute', bottom: 10 }}>
+        {t.runStartedAt ? <IBtn icon="pause" label="Pause" kind="pc" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" kind="pc" onClick={() => act.start(t)} />}
         <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
       </div>
     </div>

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
-import type { Project, Task, ID } from '../lib/types';
+import type { Project, Task, ID, Settings } from '../lib/types';
 import { Icon } from '../ui/Icon';
-import { Btn, Chip, Field, IBtn, MenuList, Popover, Tag, cx, useAnchor, type MenuItemDef } from '../ui/kit';
+import { Btn, Chip, Field, IBtn, MenuList, Popover, Switch, Tag, cx, useAnchor, type MenuItemDef, TONES } from '../ui/kit';
 import { DuePicker, EstimateDialog, DateTimePicker, remindOptions } from '../ui/pickers';
 import { useToast } from '../ui/Toast';
 import {
-  dueAt, dueLabel, elapsed, fmtClock, fmtMin, fmtMs, fmtTimer, isDone, isOverEstimate, isOverdue, outcome, relDay, remainingMs,
-  startBy, todayISO, totalEstimateMin, cap, isoDate, atTime, fmtHHMM,
+  addDays, dueAt, dueLabel, elapsed, fmtClock, fmtMin, fmtMs, fmtTimer, isDone, isOverEstimate, isOverdue, outcome, relDay, remainingMs,
+  todayISO, totalEstimateMin, cap, isoDate, atTime, parseQuickAdd,
 } from '../lib/time';
-import { avgOverrunMin } from '../lib/select';
+import { avgOverrunMin, sortBetween, statusGroups } from '../lib/select';
 import { Ring } from '../ui/kit';
+import { useDragSort } from './dnd';
 
 // ---------- small pieces ----------
 export function ProjectLabel({ p, muted }: { p?: Project; muted?: boolean }) {
@@ -22,8 +23,9 @@ export function Meta({ children }: { children: ReactNode[] }) {
   const items = children.filter(Boolean);
   return <div className="meta">{items.map((c, i) => <span key={i} className="row gap-6">{i > 0 && <span className="sep">·</span>}{c}</span>)}</div>;
 }
+export const toneDot = (tone: string) => (TONES as Record<string, [string, string, string]>)[tone]?.[2] ?? 'var(--outline)';
 
-/** Outcome chips for finished tasks: "Took 2h 5m" · "+5m over" / "−2m under" · "55m early" */
+/** Outcome chips for finished tasks: "Took 2h 5m" · "+5m over" / "2m under" · "14h late" (no "early": it was noise) */
 export function OutcomeChips({ t }: { t: Task }) {
   const { settings } = useStore();
   const o = outcome(t, settings);
@@ -33,44 +35,115 @@ export function OutcomeChips({ t }: { t: Task }) {
       {o.diffMin != null && o.diffMin > 0 && <Tag kind="warn" icon="trendUp">+{fmtMin(o.diffMin)} over</Tag>}
       {o.diffMin != null && o.diffMin < 0 && <Tag kind="ok" icon="trendDown">{fmtMin(-o.diffMin)} under</Tag>}
       {o.diffMin === 0 && <Tag kind="ok" icon="check">On estimate</Tag>}
-      {o.earlyMin != null && o.earlyMin >= 5 && <Tag kind="ok">{fmtMin(o.earlyMin)} early</Tag>}
       {o.lateMin != null && o.lateMin > 0 && <Tag kind="err">{fmtMin(o.lateMin)} late</Tag>}
     </>
   );
 }
+
+/** "Overdue" tag + when it was due */
+export function DueText({ t, settings, now }: { t: Task; settings: Settings; now?: number }) {
+  if (!t.dueDate) return null;
+  if (!isDone(t) && isOverdue(t, settings, now)) {
+    const label = t.dueDate === todayISO() && t.dueTime ? `was due ${fmtClock(atTime(t.dueDate, t.dueTime))}` : `was due ${relDay(t.dueDate)}`;
+    return <span className="m err"><Tag kind="err">Overdue</Tag>{label}</span>;
+  }
+  return <span className="m">{dueLabel(t)}</span>;
+}
+
+// rows briefly highlight after they're added
+let flash: { id: string; at: number } | null = null;
+export const flashTask = (id: string) => { flash = { id, at: Date.now() }; };
 
 export function useTaskActions() {
   const st = useStore();
   const toast = useToast();
   const ui = useUI();
   const finish = (t: Task) => {
+    const wasRunning = !!t.runStartedAt;
     const wasOver = isOverEstimate(t);
     const o = st.finishTask(t.id);
     if (!o || !st.settings.notif.finishToast) return;
     const parts = [`Done in ${fmtMs(o.tookMs)}`];
     if (o.diffMin != null && o.diffMin > 0) parts.push(`${fmtMin(o.diffMin)} over estimate`);
     else if (o.diffMin != null && o.diffMin < 0) parts.push(`${fmtMin(-o.diffMin)} under estimate`);
-    if (o.earlyMin != null && o.earlyMin >= 5) parts.push(`${fmtMin(o.earlyMin)} early`);
     if (o.lateMin != null && o.lateMin > 0) parts.push(`${fmtMin(o.lateMin)} late`);
     const over = (o.diffMin ?? 0) > 0 || (o.lateMin ?? 0) > 0;
     toast.show(parts.join(' · '), {
       icon: over ? 'warn' : 'checkCircle',
-      action: over ? { label: 'What happened?', onClick: () => ui.newEntry({ taskIds: [t.id], source: wasOver || (o.diffMin ?? 0) > 0 ? 'overEstimate' : 'late' }) } : undefined,
-      action2: { label: 'Undo', onClick: () => st.reopenTask(t.id) },
+      action: { label: 'Undo', onClick: () => { st.reopenTask(t.id); if (wasRunning) st.startTask(t.id); } },
+      action2: over ? { label: 'What happened?', onClick: () => ui.newEntry({ taskIds: [t.id], source: wasOver || (o.diffMin ?? 0) > 0 ? 'overEstimate' : 'late' }) } : undefined,
     });
   };
-  const toggleDone = (t: Task) => { if (isDone(t)) st.reopenTask(t.id); else finish(t); };
-  const toggleMyDay = (t: Task) => {
-    const on = t.myDayDate && t.myDayDate >= todayISO();
-    st.updateTask(t.id, { myDayDate: on ? null : todayISO() });
-    toast.show(on ? 'Removed from My Day' : 'Added to My Day', { icon: 'sun', duration: 3000 });
+  const start = (t: Task) => {
+    // no estimate yet: ask for one first (with "Start without estimate")
+    if (!t.estimateMin && !t.firstStartedAt) ui.askEstimate(t.id);
+    else st.startTask(t.id);
   };
-  return { finish, toggleDone, toggleMyDay, start: (t: Task) => st.startTask(t.id), pause: (t: Task) => st.pauseTask(t.id) };
+  const toggleDone = (t: Task) => { if (isDone(t)) st.reopenTask(t.id); else finish(t); };
+  const inMyDay = (t: Task) => !!t.myDayDate && t.myDayDate <= todayISO();
+  const toggleMyDay = (t: Task) => {
+    const on = inMyDay(t);
+    if (on && t.runStartedAt) { toast.show('This timer is running. Pause it first to take the task off My Day.', { icon: 'info' }); return; }
+    const prev = t.myDayDate;
+    st.updateTask(t.id, { myDayDate: on ? null : todayISO() });
+    toast.show(on ? 'Removed from My Day' : 'Added to My Day', { icon: 'sun', action: { label: 'Undo', onClick: () => st.updateTask(t.id, { myDayDate: prev }) } });
+  };
+  const tomorrow = (t: Task) => {
+    const prev = { dueDate: t.dueDate, myDayDate: t.myDayDate };
+    if (t.runStartedAt) st.pauseTask(t.id);
+    st.updateTask(t.id, { dueDate: isoDate(addDays(new Date(), 1)), myDayDate: null });
+    toast.show('Moved to tomorrow', { icon: 'event', action: { label: 'Undo', onClick: () => st.updateTask(t.id, prev) } });
+  };
+  const remove = (t: Task) => {
+    if (t.runStartedAt) st.pauseTask(t.id);
+    if (ui.taskId === t.id) ui.openTask(null);
+    const undo = st.removeTask(t.id);
+    toast.show(`Deleted “${t.title}”`, { icon: 'trash', action: { label: 'Undo', onClick: undo }, duration: 6000 });
+  };
+  const setStatus = (t: Task, s: string) => st.setStatus(t.id, s);
+  return { finish, start, toggleDone, toggleMyDay, tomorrow, remove, setStatus, inMyDay, pause: (t: Task) => st.pauseTask(t.id) };
 }
 
-// ---------- Task row (E01, E10, project page) ----------
-export function TaskRow({ t, showProject = true, showSun = false, onDragStart, dragging }: {
-  t: Task; showProject?: boolean; showSun?: boolean; onDragStart?: (e: React.DragEvent) => void; dragging?: boolean;
+// ---------- Row ⋮ menu ----------
+export function TaskMenu({ t, anchor, onClose }: { t: Task; anchor: HTMLElement | null; onClose: () => void }) {
+  const st = useStore();
+  const ui = useUI();
+  const act = useTaskActions();
+  const [moving, setMoving] = useState(false);
+  if (moving) return <ProjectPicker anchor={anchor} value={t.projectId} onClose={onClose} onPick={id => { st.updateTask(t.id, { projectId: id }); onClose(); }} />;
+  const done = isDone(t);
+  const items: MenuItemDef[] = [
+    { t: 'Open', ic: 'open', onClick: () => ui.openTask(t.id) },
+    ...(!done ? [t.runStartedAt ? { t: 'Pause timer', ic: 'pause' as const, onClick: () => act.pause(t) } : { t: 'Start timer', ic: 'play' as const, onClick: () => act.start(t) }] : []),
+    { label: 'Status' },
+    ...st.settings.taskStatuses.filter(s => s.name !== 'Archived').map(s => ({ t: s.name, dot: toneDot(s.tone), sel: t.status === s.name, onClick: () => act.setStatus(t, s.name) })),
+    { divider: true },
+    ...(!done ? [{ t: act.inMyDay(t) ? 'Remove from My Day' : 'Add to My Day', ic: act.inMyDay(t) ? 'sun' as const : 'sunFill' as const, disabled: act.inMyDay(t) && !!t.runStartedAt, sub: act.inMyDay(t) && t.runStartedAt ? 'Pause the timer first' : undefined, onClick: () => act.toggleMyDay(t) },
+      { t: 'Move to tomorrow', ic: 'event' as const, onClick: () => act.tomorrow(t) }] : []),
+    { t: 'Move to project…', ic: 'folder', keepOpen: true, onClick: () => setMoving(true) },
+    { divider: true },
+    { t: 'Delete', ic: 'trash', danger: true, onClick: () => act.remove(t) },
+  ];
+  return <Popover anchor={anchor} onClose={onClose} placement="below-end"><MenuList width={260} onClose={onClose} items={items} /></Popover>;
+}
+
+/** time / state chip at the end of a row or card */
+function TimeChip({ t, now }: { t: Task; now: number }) {
+  const running = !!t.runStartedAt;
+  const over = isOverEstimate(t, now);
+  if (!t.estimateMin) {
+    if (running || t.elapsedMs > 0) return <span className={cx('t-ll tnum', running ? 'c-primary' : 'c-muted')}>{running ? '' : 'Paused · '}{fmtTimer(elapsed(t, now))} elapsed</span>;
+    return <span className="t-bs c-faint">No estimate</span>;
+  }
+  if (over) return <Tag kind="warn" icon="hourglass">{!running ? 'Paused · ' : ''}+{fmtTimer(-remainingMs(t, now)).replace('+', '')} over</Tag>;
+  if (running) return <span className="t-ll c-primary tnum">{fmtTimer(remainingMs(t, now))} left</span>;
+  if (t.elapsedMs > 0) return <Tag icon="pause">{fmtTimer(remainingMs(t, now))} left</Tag>;
+  return <Tag icon="hourglass">{fmtMin(totalEstimateMin(t))}</Tag>;
+}
+
+// ---------- Task row ----------
+export function TaskRow({ t, showProject = true, showSun = false, carry = false, drag }: {
+  t: Task; showProject?: boolean; showSun?: boolean; carry?: boolean; drag?: Record<string, unknown>;
 }) {
   const st = useStore();
   const ui = useUI();
@@ -79,24 +152,23 @@ export function TaskRow({ t, showProject = true, showSun = false, onDragStart, d
   const now = useNow(1000, running);
   const done = isDone(t);
   const amber = !done && isOverEstimate(t, now);
-  const overdue = isOverdue(t, st.settings, now);
   const p = st.projectById(t.projectId);
-  const sb = startBy(t, st.settings);
   const stepsDone = t.steps.filter(s => s.done).length;
-  const inMyDay = !!t.myDayDate && t.myDayDate >= todayISO();
+  const inMyDay = act.inMyDay(t);
+  const ma = useAnchor();
+  const isFlash = flash?.id === t.id && Date.now() - flash.at < 1500;
   const meta: ReactNode[] = [];
-  if (amber) meta.push(<button className="m warn link" onClick={e => { e.stopPropagation(); ui.openWhatHappened(t.id); }} style={{ color: 'var(--warning)', fontWeight: 500 }}>What happened?</button>);
-  if (!done && t.status === 'In progress' && !amber) meta.push(<span className="m primary">{running ? 'Running' : 'In progress'}</span>);
   if (showProject && p) meta.push(<ProjectLabel p={p} />);
-  if (!showProject && showSun && inMyDay) meta.push(<span className="m primary"><Icon name="sunFill" />My Day</span>);
-  if (t.steps.length) meta.push(<span className="m">{stepsDone} of {t.steps.length}</span>);
-  if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m"><Icon name="bell" />{relDay(isoDate(new Date(t.remindAt))) === 'today' ? '' : cap(relDay(isoDate(new Date(t.remindAt)))) + ' '}{fmtClock(t.remindAt)}</span>);
-  if (!done && t.dueDate) meta.push(<span className={cx('m', overdue && 'err')}>{overdue ? (t.dueDate === todayISO() && t.dueTime ? `Overdue since ${fmtHHMM(t.dueTime)}` : `Overdue · was due ${relDay(t.dueDate)}`) : dueLabel(t)}</span>);
-  if (!done && sb && !t.firstStartedAt && sb.getTime() > now && isoDate(sb) === todayISO()) meta.push(<span className="m">Start by {fmtClock(sb)}</span>);
+  if (!showProject && showSun && inMyDay && !done) meta.push(<span className="m primary"><Icon name="sunFill" />My Day</span>);
+  if (carry && !done && t.myDayDate && t.myDayDate < todayISO()) meta.push(<span className="m">From {relDay(t.myDayDate)}</span>);
+  if (!done && t.dueDate) meta.push(<DueText t={t} settings={st.settings} now={now} />);
+  if (t.steps.length) meta.push(<span className="m"><Icon name="checklist" />{stepsDone}/{t.steps.length}</span>);
+  if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m" data-tip={`Reminder ${relDay(isoDate(new Date(t.remindAt)))} ${fmtClock(t.remindAt)}`}><Icon name="bell" /></span>);
 
   return (
-    <div className={cx('task-row', done && 'done', amber && 'amber', ui.taskId === t.id && 'sel', dragging && 'dragging')}
-      onClick={() => ui.openTask(t.id)} draggable={!!onDragStart} onDragStart={onDragStart} data-task={t.id}>
+    <div className={cx('task-row', done && 'done', amber && 'amber', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
+      onClick={() => ui.openTask(t.id)} data-task={t.id}>
+      {drag && <span className="grip" data-drag-handle aria-hidden><Icon name="drag" /></span>}
       <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} data-tip={done ? 'Mark not done' : 'Mark done'}
         onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
         <Icon name={done ? 'checkCircle' : 'circle'} />
@@ -106,21 +178,17 @@ export function TaskRow({ t, showProject = true, showSun = false, onDragStart, d
         {meta.length > 0 && <Meta>{meta}</Meta>}
       </div>
       <div className="trail" onClick={e => e.stopPropagation()}>
-        {done ? <OutcomeChips t={t} /> : (
-          <>
-            {amber ? <Tag kind="warn" icon="hourglass">+{fmtTimer(-remainingMs(t, now)).replace('+', '')} over</Tag>
-              : running ? <span className="t-ll c-primary tnum">{fmtTimer(remainingMs(t, now))} left</span>
-              : t.estimateMin ? <Tag icon="hourglass">{fmtMin(totalEstimateMin(t))}</Tag> : null}
-            {showSun && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? 'Remove from My Day' : 'Add to My Day'} className={inMyDay ? 'on-primary' : ''} onClick={() => act.toggleMyDay(t)} />}
-            {running ? <IBtn icon="pause" kind="pc" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" kind="pc" label={t.elapsedMs ? 'Resume' : 'Start timer'} onClick={() => act.start(t)} />}
-          </>
-        )}
+        {done ? <OutcomeChips t={t} /> : <TimeChip t={t} now={now} />}
+        {showSun && !done && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? (running ? 'Running tasks stay in My Day' : 'Remove from My Day') : 'Add to My Day'} className={inMyDay ? 'on-primary' : ''} onClick={() => act.toggleMyDay(t)} />}
+        {!done && (running ? <IBtn icon="pause" kind="pc" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" kind="pc" label={t.elapsedMs ? 'Resume' : 'Start timer'} onClick={() => act.start(t)} />)}
+        <IBtn icon="moreV" label="More" className="row-more" kind={ma.isOpen ? 'selected' : 'standard'} onClick={e => ma.open(e)} />
       </div>
+      {ma.isOpen && <TaskMenu t={t} anchor={ma.el} onClose={ma.close} />}
     </div>
   );
 }
 
-// ---------- Running card (E08 / E10) ----------
+// ---------- The "Now" timer card ----------
 export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   const st = useStore();
   const ui = useUI();
@@ -136,14 +204,13 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   const meta: ReactNode[] = [];
   if (p) meta.push(<ProjectLabel p={p} />);
   if (t.steps.length) meta.push(<span className="m">{stepsDone} of {t.steps.length} steps</span>);
-  if (t.dueDate) meta.push(<span className="m">{dueLabel(t)}</span>);
-  const sbEnd = dueAt(t, st.settings);
+  if (t.dueDate) meta.push(<DueText t={t} settings={st.settings} now={now} />);
   if (running && t.estimateMin && rem > 0) meta.push(<span className="m">done by {fmtClock(new Date(now + rem))}</span>);
-  else if (!running && sbEnd) meta.push(<span className="m">Paused</span>);
+  if (!running) meta.push(<span className="m"><Icon name="pause" />Paused</span>);
   return (
     <div className={cx('run-card', amber && 'amber')}>
       <Ring pct={amber ? 100 : pct} size={64} stroke={6} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? '#ffb1c8' : 'var(--surface-lowest)'}>
-        <Icon name={amber ? 'warn' : 'hourglass'} style={{ color: amber ? 'var(--warning)' : 'var(--primary)' }} />
+        <Icon name={amber ? 'warn' : running ? 'hourglass' : 'pause'} style={{ color: amber ? 'var(--warning)' : 'var(--primary)' }} />
       </Ring>
       <button className="col grow" style={{ textAlign: 'left', gap: 4, minWidth: 0 }} onClick={() => ui.openTask(t.id)}>
         <span className="t-tl ellipsis">{t.title}</span>
@@ -151,10 +218,10 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
       </button>
       <div className="timer">
         <span className="big">{t.estimateMin ? fmtTimer(rem) : fmtTimer(elapsed(t, now))}</span>
-        <span className="t-bs">{!t.estimateMin ? 'elapsed · no estimate' : amber ? 'over estimate' : `left of ${fmtMin(totalEstimateMin(t))} estimate`}</span>
+        <span className="t-bs">{!t.estimateMin ? 'elapsed · no estimate' : amber ? 'over estimate' : `left of ${fmtMin(totalEstimateMin(t))}`}</span>
       </div>
       <div className="row gap-8">
-        {amber && <Btn kind="warn-outlined" icon="edit" onClick={() => ui.openWhatHappened(t.id)}>What happened?</Btn>}
+        {amber && running && <Btn kind="warn-outlined" icon="edit" onClick={() => ui.openWhatHappened(t.id)}>What happened?</Btn>}
         <IBtn icon="pip" label="Pop out mini timer" onClick={onPopOut} />
         {running ? <IBtn icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" onClick={() => act.start(t)} />}
         <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
@@ -164,9 +231,61 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
 }
 
 export function NothingRunning() {
-  return <div className="nothing-running"><Icon name="timer" style={{ color: 'var(--outline)' }} />Nothing running. Press <Icon name="play" size={20} /> on a task below.</div>;
+  return <div className="nothing-running"><Icon name="timer" style={{ color: 'var(--outline)' }} />Nothing running. Press <Icon name="play" size={20} /> on a task to start its timer.</div>;
 }
 
+// ---------- moving tasks between groups / positions ----------
+export function useMoveTask(tasks: Task[]) {
+  const st = useStore();
+  return (id: string, group: string, before: string | null) => {
+    const t = st.taskById(id); if (!t) return;
+    const groups = statusGroups(st.settings.taskStatuses, tasks);
+    const g = groups.find(x => x.def.name === group); if (!g) return;
+    const list = g.tasks.filter(x => x.id !== id);
+    const idx = before ? Math.max(0, list.findIndex(x => x.id === before)) : list.length;
+    const sort = sortBetween(list[idx - 1], list[idx]);
+    st.updateTask(id, { sort });
+    const home = groups.find(x => x.tasks.some(y => y.id === id))?.def.name;
+    if (home !== group) st.setStatus(id, group);
+  };
+}
+
+const collapsedKey = (k: string) => `ot-collapsed-${k}`;
+function useCollapsed(key: string) {
+  const [v, setV] = useState(() => { try { return localStorage.getItem(collapsedKey(key)) === '1'; } catch { return false; } });
+  return [v, (x: boolean) => { setV(x); try { localStorage.setItem(collapsedKey(key), x ? '1' : '0'); } catch { /* ignore */ } }] as const;
+}
+
+/** Status-grouped list (My Day and project pages): same groups as the board. */
+export function TaskGroups({ tasks, showProject = true, showSun = false, carry = false, scope }: { tasks: Task[]; showProject?: boolean; showSun?: boolean; carry?: boolean; scope: string }) {
+  const st = useStore();
+  const move = useMoveTask(tasks);
+  const drag = useDragSort(move);
+  const groups = statusGroups(st.settings.taskStatuses, tasks);
+  return (
+    <div className="col gap-24">
+      {groups.map(g => <Group key={g.def.name} name={g.def.name} tone={g.def.tone} tasks={g.tasks} scope={scope} drag={drag} showProject={showProject} showSun={showSun} carry={carry} />)}
+    </div>
+  );
+}
+function Group({ name, tone, tasks, scope, drag, showProject, showSun, carry }: { name: string; tone: string; tasks: Task[]; scope: string; drag: (id: string) => Record<string, unknown>; showProject: boolean; showSun: boolean; carry: boolean }) {
+  const [collapsed, setCollapsed] = useCollapsed(`${scope}-${name}`);
+  return (
+    <div className="col gap-8">
+      <button className="group-head state" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}>
+        <Icon name={collapsed ? 'chevRight' : 'chevDown'} size={20} />
+        <span className="dot" style={{ background: toneDot(tone) }} />
+        <span className="t-ts">{name}</span><span className="t-ts c-faint">{tasks.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="list drop-zone" data-drop-group={name}>
+          {tasks.map(t => <TaskRow key={t.id} t={t} showProject={showProject} showSun={showSun} carry={carry} drag={drag(t.id)} />)}
+          {!tasks.length && <div className="drop-hint">Drag tasks here</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 // ---------- Project picker (E04 / E05 / F02) ----------
 export function ProjectPicker({ value, onPick, onClose, anchor, allowCreate = true }: {
   value: ID | null; onPick: (id: ID) => void; onClose: () => void; anchor: HTMLElement | null; allowCreate?: boolean;
@@ -174,7 +293,7 @@ export function ProjectPicker({ value, onPick, onClose, anchor, allowCreate = tr
   const st = useStore();
   const [q, setQ] = useState('');
   const list = st.projects
-    .filter(p => p.status !== 'Archived' || p.id === value)
+    .filter(p => !p.archived || p.id === value)
     .filter(p => p.name.toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => Number(b.isInbox) - Number(a.isInbox) || a.sort - b.sort);
   const exact = st.projects.some(p => p.name.toLowerCase() === q.trim().toLowerCase());
@@ -216,6 +335,7 @@ function DateTimeFuture({ value, onDone, onCancel }: { value?: string | null; on
   );
 }
 
+
 // ---------- Add a task bar (E03–E07, G08, G13) ----------
 export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: { projectId?: ID; label?: string; inMyDay?: boolean }) {
   const st = useStore();
@@ -227,11 +347,13 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   const [due, setDue] = useState<{ date: string | null; time: string | null }>({ date: todayISO(), time: null });
   const [est, setEst] = useState<number | null>(null);
   const [remind, setRemind] = useState<string | null>(null);
+  const [myDay, setMyDay] = useState(inMyDay);
   const pa = useAnchor(), da = useAnchor(), ra = useAnchor();
   const [estOpen, setEstOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const project = st.projectById(proj ?? st.inbox?.id);
+  const parsed = useMemo(() => parseQuickAdd(title), [title]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -243,13 +365,17 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
     document.addEventListener('pointerdown', h);
     return () => document.removeEventListener('pointerdown', h);
   }, [open, title]);
-  const reset = () => { setTitle(''); setEst(null); setRemind(null); setDue({ date: todayISO(), time: null }); if (!projectId) setProj(null); };
+  // the project stays as picked for the next task (handy when adding several)
+  const reset = () => { setTitle(''); setEst(null); setRemind(null); setDue({ date: todayISO(), time: null }); };
   const submit = () => {
-    if (!title.trim()) return;
-    const addToMyDay = inMyDay && (!due.date || due.date <= todayISO());
-    const t = st.addTask({ title: title.trim(), projectId: proj ?? st.inbox?.id ?? null, dueDate: due.date, dueTime: due.time, estimateMin: est, remindAt: remind, myDayDate: addToMyDay ? todayISO() : null });
-    const where = addToMyDay ? (inMyDay && !projectId ? 'Up next' : 'My Day') : project?.name ?? 'Inbox';
-    toast.show(`Added to ${where}`, { icon: 'checkCircle', action: { label: 'Open', onClick: () => ui.openTask(t.id) }, duration: 4000 });
+    const name = parsed.title.trim();
+    if (!name) return;
+    const date = parsed.date ?? due.date;
+    const addToMyDay = myDay && (!date || date <= todayISO());
+    const t = st.addTask({ title: name, projectId: proj ?? st.inbox?.id ?? null, dueDate: date, dueTime: parsed.date ? null : due.time, estimateMin: parsed.estimate ?? est, remindAt: remind, myDayDate: addToMyDay ? todayISO() : null });
+    flashTask(t.id);
+    const where = addToMyDay && !projectId ? 'My Day' : project?.name ?? 'Inbox';
+    toast.show(`Added to ${where}${addToMyDay && projectId ? ' and My Day' : ''}`, { icon: 'checkCircle', action: { label: 'Open', onClick: () => ui.openTask(t.id) }, duration: 4000 });
     reset();
     inputRef.current?.focus();
   };
@@ -260,25 +386,29 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
       </button>
     );
   }
-  const dueText = due.date ? cap(dueLabel({ dueDate: due.date, dueTime: due.time })!) : 'No due date';
+  const effDate = parsed.date ?? due.date;
+  const dueText = effDate ? cap(dueLabel({ dueDate: effDate, dueTime: parsed.date ? null : due.time })!) : 'No due date';
+  const effEst = parsed.estimate ?? est;
   return (
     <div className="add-panel" ref={wrapRef}>
       <div className="line">
         <Icon name="add" style={{ color: 'var(--primary)' }} />
-        <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="What do you need to do?" aria-label="Task title"
+        <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="What do you need to do?  Try “Write brief tomorrow 45m”" aria-label="Task title"
           onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { reset(); setOpen(false); } }} />
-        <span className="t-bs c-muted row gap-6" style={{ whiteSpace: 'nowrap' }}><span className="keycap">↵</span>{inMyDay && (!due.date || due.date <= todayISO()) ? 'Add to My Day' : 'Add task'}</span>
+        <span className="t-bs c-muted row gap-6" style={{ whiteSpace: 'nowrap' }}><span className="keycap">↵</span>Add</span>
       </div>
       <div className="chips">
-        {!projectId && <Chip emoji={proj ? project?.emoji : undefined} icon={proj ? undefined : 'add'} sel={!!proj} onClick={e => pa.open(e)}>{proj ? project?.name : 'Add project'}</Chip>}
-        <Chip icon="event" sel={!!due.date} onClick={e => da.open(e)}>{dueText}</Chip>
-        <Chip icon="hourglass" sel={!!est} onClick={() => setEstOpen(true)}>{est ? fmtMin(est) : 'Estimate'}</Chip>
+        {!projectId && <Chip emoji={project?.emoji} onClick={e => pa.open(e)}>{project?.name ?? 'Inbox'}</Chip>}
+        <Chip icon="event" sel={!!effDate} onClick={e => da.open(e)} onRemove={effDate && !parsed.date ? () => setDue({ date: null, time: null }) : undefined}>{dueText}</Chip>
+        <Chip icon="hourglass" sel={!!effEst} onClick={() => setEstOpen(true)}>{effEst ? fmtMin(effEst) : 'Estimate'}</Chip>
         <Chip icon="bell" sel={!!remind} onClick={e => ra.open(e)}>{remind ? `${cap(relDay(isoDate(new Date(remind))))} ${fmtClock(remind)}` : 'Remind me'}</Chip>
+        {!inMyDay && <Chip icon={myDay ? 'sunFill' : 'sun'} sel={myDay} onClick={() => setMyDay(!myDay)}>My Day</Chip>}
         <span className="grow" />
         <Btn kind="text" onClick={() => { reset(); setOpen(false); }}>Cancel</Btn>
-        <Btn disabled={!title.trim()} onClick={submit}>Add</Btn>
+        <Btn disabled={!parsed.title.trim()} onClick={submit}>Add</Btn>
       </div>
-      {pa.isOpen && <ProjectPicker anchor={pa.el} value={proj} onPick={setProj} onClose={pa.close} />}
+      {(parsed.date || parsed.estimate) && <div className="t-bs c-muted" style={{ paddingLeft: 36 }}>Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(' and ')}.</div>}
+      {pa.isOpen && <ProjectPicker anchor={pa.el} value={proj ?? st.inbox?.id ?? null} onPick={setProj} onClose={pa.close} />}
       {da.isOpen && <Popover anchor={da.el} onClose={da.close}><DuePicker date={due.date} time={due.time} onDone={(date, time) => { setDue({ date, time }); da.close(); }} onClear={() => { setDue({ date: null, time: null }); da.close(); }} /></Popover>}
       {ra.isOpen && <RemindPicker anchor={ra.el} onClose={ra.close} t={{ dueDate: due.date, dueTime: due.time }} value={remind} onPick={setRemind} />}
       {estOpen && <EstimateDialog initial={est} onSet={setEst} onClose={() => setEstOpen(false)} dueAt={dueAt({ dueDate: due.date, dueTime: due.time }, st.settings)} avgOverrunMin={avgOverrunMin(st.tasks)} />}
@@ -286,63 +416,134 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   );
 }
 
-// ---------- Board (G01 / G04 / G02 / G05) ----------
-export function TaskBoard({ tasks, showProject = true, columns }: { tasks: Task[]; showProject?: boolean; columns: string[] }) {
+/** ▶ on a task without an estimate asks for one first */
+export function EstimateFirstHost() {
+  const st = useStore();
+  const ui = useUI();
+  const t = st.taskById(ui.estimateFirst);
+  if (!t) return null;
+  return <EstimateDialog mode="start" initial={null} dueAt={dueAt(t, st.settings)} avgOverrunMin={avgOverrunMin(st.tasks)} onClose={() => ui.askEstimate(null)}
+    onSet={min => { if (min) st.updateTask(t.id, { estimateMin: min }); st.startTask(t.id); }} onStartAnyway={() => st.startTask(t.id)} />;
+}
+
+// ---------- Board: the same groups as the list ----------
+export function TaskBoard({ tasks, showProject = true }: { tasks: Task[]; showProject?: boolean }) {
   const st = useStore();
   const ui = useUI();
   const act = useTaskActions();
-  const [drag, setDrag] = useState<ID | null>(null);
-  const [over, setOver] = useState<string | null>(null);
-  const now = useNow(5000);
-  const byCol = useMemo(() => {
-    const m = new Map<string, Task[]>(columns.map(c => [c, []]));
-    tasks.forEach(t => { const k = columns.includes(t.status) ? t.status : columns[0]; m.get(k)!.push(t); });
-    return m;
-  }, [tasks, columns]);
-  const tone = (name: string) => st.settings.taskStatuses.find(s => s.name === name)?.tone ?? 'neutral';
+  const now = useNow(1000);
+  const move = useMoveTask(tasks);
+  const drag = useDragSort(move);
+  const groups = statusGroups(st.settings.taskStatuses, tasks);
   return (
     <div className="board">
-      {columns.map(c => (
-        <div key={c} className={cx('board-col', over === c && 'over')}
-          onDragOver={e => { e.preventDefault(); setOver(c); }} onDragLeave={() => setOver(null)}
-          onDrop={() => {
-            setOver(null);
-            const t = st.taskById(drag); setDrag(null);
-            if (!t || t.status === c) return;
-            if (c === 'Done') act.finish(t);
-            else if (isDone(t)) { st.reopenTask(t.id); st.updateTask(t.id, { status: c }); }
-            else st.updateTask(t.id, { status: c });
-          }}>
+      {groups.map(g => (
+        <div key={g.def.name} className="board-col" data-drop-group={g.def.name}>
           <div className="board-col-head">
-            <span className="dot" style={{ background: `var(--${({ blue: 'primary', green: 'success', purple: 'tertiary', amber: 'warning', red: 'error', secondary: 'secondary' } as any)[tone(c)] ?? 'outline'})` }} />
-            <span className="t-ts">{c}</span><span className="count">{byCol.get(c)!.length}</span>
+            <span className="dot" style={{ background: toneDot(g.def.tone) }} />
+            <span className="t-ts">{g.def.name}</span><span className="count">{g.tasks.length}</span>
           </div>
-          {byCol.get(c)!.map(t => {
-            const p = st.projectById(t.projectId);
-            const amber = isOverEstimate(t, now);
-            return (
-              <div key={t.id} className={cx('kcard', amber && 'amber')} draggable onDragStart={() => setDrag(t.id)} onDragEnd={() => setDrag(null)}
-                style={{ opacity: drag === t.id ? 0.4 : 1 }} onClick={() => ui.openTask(t.id)}>
-                <div className="row gap-8" style={{ alignItems: 'flex-start' }}>
-                  <span className={cx('t-bl grow', isDone(t) && 'c-muted')} style={{ textDecoration: isDone(t) ? 'line-through' : undefined }}>{t.title}</span>
-                  {!isDone(t) && <IBtn sm icon={t.runStartedAt ? 'pause' : 'play'} kind="pc" label={t.runStartedAt ? 'Pause' : 'Start timer'} onClick={e => { e.stopPropagation(); t.runStartedAt ? act.pause(t) : act.start(t); }} />}
-                </div>
-                <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
-                  {showProject && p && <span className="t-bs c-muted row gap-4"><span className="emoji">{p.emoji}</span>{p.name}</span>}
-                  {isDone(t) ? <OutcomeChips t={t} /> : (
-                    <>
-                      {t.estimateMin ? <Tag icon="hourglass">{fmtMin(totalEstimateMin(t))}</Tag> : null}
-                      {t.dueDate && <Tag kind={isOverdue(t, st.settings) ? 'err' : undefined}>{dueLabel(t)}</Tag>}
-                      {amber && <Tag kind="warn">Over estimate</Tag>}
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {!byCol.get(c)!.length && <div className="t-bs c-faint" style={{ padding: '8px 12px 12px' }}>Drop tasks here</div>}
+          {g.tasks.map(t => <BoardCard key={t.id} t={t} showProject={showProject} now={now} drag={drag(t.id)} onOpen={() => ui.openTask(t.id)} act={act} />)}
+          {!g.tasks.length && <div className="drop-hint">Drag tasks here</div>}
         </div>
       ))}
+    </div>
+  );
+}
+
+function BoardCard({ t, showProject, now, drag, onOpen, act }: { t: Task; showProject: boolean; now: number; drag: Record<string, unknown>; onOpen: () => void; act: ReturnType<typeof useTaskActions> }) {
+  const st = useStore();
+  const ui = useUI();
+  const p = st.projectById(t.projectId);
+  const done = isDone(t);
+  const amber = !done && isOverEstimate(t, now);
+  const running = !!t.runStartedAt;
+  const ma = useAnchor();
+  return (
+    <div className={cx('kcard', amber && 'amber', ui.taskId === t.id && 'sel', running && 'running')} {...drag} onClick={onOpen}>
+      <div className="row gap-4" style={{ alignItems: 'flex-start' }}>
+        <button className={cx('check sm', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
+          <Icon name={done ? 'checkCircle' : 'circle'} size={20} />
+        </button>
+        <span className={cx('t-bl grow', done && 'c-muted')} style={{ textDecoration: done ? 'line-through' : undefined, paddingTop: 4 }}>{t.title}</span>
+        <IBtn sm icon="moreV" label="More" className="row-more" onClick={e => { e.stopPropagation(); ma.open(e); }} />
+      </div>
+      <div className="row gap-8" style={{ flexWrap: 'wrap', paddingLeft: 36 }}>
+        {showProject && p && <span className="t-bs c-muted row gap-4"><span className="emoji">{p.emoji}</span>{p.name}</span>}
+        {done ? <OutcomeChips t={t} /> : (
+          <>
+            <TimeChip t={t} now={now} />
+            {t.dueDate && (isOverdue(t, st.settings, now) ? <Tag kind="err">Overdue · {relDay(t.dueDate)}</Tag> : <Tag>{dueLabel(t)}</Tag>)}
+          </>
+        )}
+      </div>
+      {!done && (
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: -4 }} onClick={e => e.stopPropagation()}>
+          {running ? <IBtn sm icon="pause" kind="pc" label="Pause" onClick={() => act.pause(t)} /> : <IBtn sm icon="play" kind="pc" label={t.elapsedMs ? 'Resume' : 'Start timer'} onClick={() => act.start(t)} />}
+        </div>
+      )}
+      {ma.isOpen && <TaskMenu t={t} anchor={ma.el} onClose={ma.close} />}
+    </div>
+  );
+}
+
+// ---------- Shared task filter (My Day and project pages) ----------
+export interface TaskFilter { statuses: string[]; due: 'overdue' | 'today' | 'week' | null; projects: string[]; myDay: boolean }
+export const EMPTY_FILTER: TaskFilter = { statuses: [], due: null, projects: [], myDay: false };
+export const filterActive = (f: TaskFilter) => f.statuses.length > 0 || !!f.due || f.projects.length > 0 || f.myDay;
+export function applyTaskFilter(tasks: Task[], f: TaskFilter, s: Settings) {
+  const today = todayISO(), week = isoDate(addDays(new Date(), 7));
+  return tasks.filter(t => {
+    if (f.statuses.length && !f.statuses.includes(t.status)) return false;
+    if (f.projects.length && !(t.projectId && f.projects.includes(t.projectId))) return false;
+    if (f.myDay && !(t.myDayDate && t.myDayDate <= today)) return false;
+    if (f.due === 'overdue' && !isOverdue(t, s)) return false;
+    if (f.due === 'today' && t.dueDate !== today) return false;
+    if (f.due === 'week' && !(t.dueDate && t.dueDate >= today && t.dueDate <= week)) return false;
+    return true;
+  });
+}
+export function FilterButton({ value, onChange, showProjects, showMyDay }: { value: TaskFilter; onChange: (f: TaskFilter) => void; showProjects?: boolean; showMyDay?: boolean }) {
+  const st = useStore();
+  const a = useAnchor();
+  const toggle = <K extends 'statuses' | 'projects'>(k: K, v: string) => onChange({ ...value, [k]: value[k].includes(v) ? value[k].filter(x => x !== v) : [...value[k], v] });
+  return (
+    <>
+      <IBtn icon="filter" label="Filter tasks" kind={filterActive(value) || a.isOpen ? 'selected' : 'outlined'} onClick={e => a.open(e)} />
+      {a.isOpen && (
+        <Popover anchor={a.el} onClose={a.close} placement="below-end">
+          <div className="menu" style={{ width: 360, padding: 16, gap: 12 }}>
+            <span className="t-lm c-muted">STATUS</span>
+            <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+              {st.settings.taskStatuses.filter(s => s.name !== 'Archived').map(s => <Chip key={s.name} sel={value.statuses.includes(s.name)} onClick={() => toggle('statuses', s.name)}>{s.name}</Chip>)}
+            </div>
+            <span className="t-lm c-muted">DUE</span>
+            <div className="row gap-8">{(['overdue', 'today', 'week'] as const).map(d => <Chip key={d} sel={value.due === d} onClick={() => onChange({ ...value, due: value.due === d ? null : d })}>{d === 'week' ? 'This week' : cap(d)}</Chip>)}</div>
+            {showProjects && <>
+              <span className="t-lm c-muted">PROJECT</span>
+              <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+                {st.projects.filter(p => !p.archived).map(p => <Chip key={p.id} emoji={p.emoji} sel={value.projects.includes(p.id)} onClick={() => toggle('projects', p.id)}>{p.name}</Chip>)}
+              </div>
+            </>}
+            {showMyDay && <div className="row gap-12"><span className="t-bm grow">Only tasks in My Day</span><Switch on={value.myDay} onChange={v => onChange({ ...value, myDay: v })} label="Only tasks in My Day" /></div>}
+            <div className="row" style={{ justifyContent: 'flex-end' }}><Btn kind="text" icon="close" disabled={!filterActive(value)} onClick={() => onChange(EMPTY_FILTER)}>Clear filter</Btn></div>
+          </div>
+        </Popover>
+      )}
+    </>
+  );
+}
+export function FilterChips({ value, onChange, shown, total }: { value: TaskFilter; onChange: (f: TaskFilter) => void; shown: number; total: number }) {
+  const st = useStore();
+  if (!filterActive(value)) return null;
+  return (
+    <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+      {value.statuses.map(s => <Chip key={s} sel onRemove={() => onChange({ ...value, statuses: value.statuses.filter(x => x !== s) })}>{s}</Chip>)}
+      {value.due && <Chip sel icon="event" onRemove={() => onChange({ ...value, due: null })}>{value.due === 'week' ? 'Due this week' : value.due === 'today' ? 'Due today' : 'Overdue'}</Chip>}
+      {value.projects.map(id => { const p = st.projectById(id); return p ? <Chip key={id} sel emoji={p.emoji} onRemove={() => onChange({ ...value, projects: value.projects.filter(x => x !== id) })}>{p.name}</Chip> : null; })}
+      {value.myDay && <Chip sel icon="sunFill" onRemove={() => onChange({ ...value, myDay: false })}>In My Day</Chip>}
+      <span className="t-bs c-muted">{shown} of {total} tasks</span>
+      <Btn kind="text" onClick={() => onChange(EMPTY_FILTER)}>Clear</Btn>
     </div>
   );
 }

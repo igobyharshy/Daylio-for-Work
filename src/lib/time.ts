@@ -74,7 +74,7 @@ export function fmtMin(min: number): string {
   if (!r) return `${h}h`;
   return `${h}h ${r}m`;
 }
-export const fmtMs = (ms: number) => fmtMin(ms / 60000);
+export const fmtMs = (ms: number) => (ms > 0 && ms < 60000 ? '<1m' : fmtMin(ms / 60000));
 
 // ---------- task maths ----------
 export const totalEstimateMin = (t: Task) => (t.estimateMin ?? 0) + t.reEstimates.reduce((a, r) => a + r.addMin, 0);
@@ -130,3 +130,28 @@ export function inWorkDay(s: Settings, now = new Date()) {
   return m >= sh * 60 + sm && m < eh * 60 + em;
 }
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+/** Quick add: trailing "today / tomorrow / mon…sun" and "30m / 1h / 1h30 / 1h 30m" become chips. */
+export function parseQuickAdd(raw: string, now = new Date()): { title: string; date?: string; estimate?: number } {
+  let title = raw.trimEnd();
+  const out: { title: string; date?: string; estimate?: number } = { title };
+  const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  for (let i = 0; i < 2; i++) {
+    const est = title.match(/\s(\d{1,2})h(?:\s?(\d{1,2})m?)?$|\s(\d{1,3})m(?:in)?$/i);
+    if (est && out.estimate == null) {
+      const min = est[3] ? Number(est[3]) : Number(est[1]) * 60 + Number(est[2] ?? 0);
+      if (min > 0 && min <= 24 * 60) { out.estimate = min; title = title.slice(0, est.index).trimEnd(); continue; }
+    }
+    const day = title.match(/\s(today|tomorrow|tmrw|mon|tue|wed|thu|fri|sat|sun)(?:day)?$/i);
+    if (day && out.date == null) {
+      const w = day[1].toLowerCase();
+      let d = new Date(now);
+      if (w === 'tomorrow' || w === 'tmrw') d = addDays(now, 1);
+      else if (w !== 'today') { const target = days.indexOf(w.slice(0, 3)); let diff = (target - now.getDay() + 7) % 7; if (diff === 0) diff = 7; d = addDays(now, diff); }
+      out.date = isoDate(d); title = title.slice(0, day.index).trimEnd(); continue;
+    }
+    break;
+  }
+  out.title = title;
+  return out;
+}

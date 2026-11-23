@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase';
 import { useUI } from './ui';
 import { Icon } from '../ui/Icon';
 import { Btn, Chip, IBtn, MenuList, Popover, Tag, cx, useAnchor } from '../ui/kit';
-import { myDayTasks, needsReflection, tagTone } from '../lib/select';
+import { myDayTasks, needsReflection, tagChipTone } from '../lib/select';
+import { TimerChip } from '../features/common';
 import { fmtClock, fmtDayShort, isDone, relDay, isoDate, cap } from '../lib/time';
 
 export function TopBar() {
@@ -20,6 +21,7 @@ export function TopBar() {
     return () => window.removeEventListener('keydown', h);
   }, [ui]);
   const initial = (st.displayName || st.email || '?').charAt(0).toUpperCase();
+  const loc = useLocation();
   return (
     <header className="topbar">
       <button className="brand state" onClick={() => nav('/my-day')} aria-label="Ontrack home">
@@ -27,8 +29,9 @@ export function TopBar() {
       </button>
       <button className="searchbar" onClick={() => ui.setSearchOpen(true)}><Icon name="search" /><span className="t-bl">Search tasks, projects, journal</span><span className="keycap">Ctrl K</span></button>
       <div className="top-actions">
+        <TimerChip />
         <IBtn icon="bell" label="Notifications" badge={st.settings.notif.bellBadge && unread ? unread : null} kind={ba.isOpen ? 'selected' : 'standard'} onClick={e => ba.open(e)} />
-        <IBtn icon="settings" label="Settings" onClick={() => nav('/settings/work-day')} />
+        <IBtn icon="settings" label="Settings" kind={loc.pathname.startsWith('/settings') ? 'selected' : 'standard'} onClick={() => nav('/settings/work-day')} />
         <button className="avatar state" aria-label="Account" onClick={e => aa.open(e)} data-tip={st.displayName || st.email}>{initial}</button>
       </div>
       {ba.isOpen && <NotificationsPanel anchor={ba.el} onClose={ba.close} />}
@@ -82,7 +85,7 @@ function NotificationsPanel({ anchor, onClose }: { anchor: HTMLElement | null; o
 export function NavDrawer() {
   const st = useStore();
   const loc = useLocation();
-  const left = myDayTasks(st.tasks).filter(t => !isDone(t)).length;
+  const left = myDayTasks(st.tasks, st.projects).filter(t => !isDone(t)).length;
   const reflect = needsReflection(st.tasks).length;
   const items = [
     { to: '/my-day', label: 'My Day', icon: 'sun', on: 'sunFill', count: left },
@@ -98,7 +101,7 @@ export function NavDrawer() {
           <NavLink key={it.to} to={it.to} className={cx('nav-item state', active && 'on')}>
             <Icon name={active ? it.on : it.icon} />{it.label}
             {'count' in it && it.count > 0 && <span className="count-r">{it.count}</span>}
-            {'warn' in it && it.warn > 0 && <span className="count-r warn" data-tip={`${it.warn} need a reflection`}>{it.warn}</span>}
+            {'warn' in it && it.warn > 0 && <span className="count-r" data-tip={`${it.warn} ${it.warn === 1 ? 'task' : 'tasks'} to reflect on`}>{it.warn}</span>}
           </NavLink>
         );
       })}
@@ -123,11 +126,11 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
     const out: { kind: Kind; id: string; title: string; sub: string; lead: React.ReactNode; go: () => void }[] = [];
     if (kind === 'all' || kind === 'tasks') st.tasks.filter(t => t.title.toLowerCase().includes(ql) || t.note.toLowerCase().includes(ql)).sort((a, b) => Number(!!a.finishedAt) - Number(!!b.finishedAt)).slice(0, kind === 'all' ? 5 : 30).forEach(t => {
       const p = st.projectById(t.projectId);
-      out.push({ kind: 'tasks', id: t.id, title: t.title, sub: [p?.name, t.finishedAt ? 'Done' : t.dueDate ? 'Due ' + relDay(t.dueDate) : null].filter(Boolean).join(' · '), lead: <Icon name={t.finishedAt ? 'checkCircle' : 'circle'} style={{ color: t.finishedAt ? 'var(--primary)' : 'var(--outline)' }} />, go: () => ui.openTask(t.id) });
+      out.push({ kind: 'tasks', id: t.id, title: t.title, sub: [p?.name, p?.archived ? 'Archived project' : null, t.runStartedAt ? 'Running' : null, t.finishedAt ? 'Done' : t.dueDate ? 'Due ' + relDay(t.dueDate) : null].filter(Boolean).join(' · '), lead: <Icon name={t.finishedAt ? 'checkCircle' : 'circle'} style={{ color: t.finishedAt ? 'var(--primary)' : 'var(--outline)' }} />, go: () => ui.openTask(t.id) });
     });
     if (kind === 'all' || kind === 'projects') st.projects.filter(p => p.name.toLowerCase().includes(ql) || p.tags.some(t => t.toLowerCase().includes(ql))).slice(0, kind === 'all' ? 3 : 30).forEach(p => {
       const open = st.tasks.filter(t => t.projectId === p.id && !t.finishedAt).length;
-      out.push({ kind: 'projects', id: p.id, title: p.name, sub: [`${open} open`, p.tags.join(', ')].filter(Boolean).join(' · '), lead: <span className="emoji" style={{ fontSize: 20, width: 24, textAlign: 'center' }}>{p.emoji}</span>, go: () => nav(`/projects/${p.id}`) });
+      out.push({ kind: 'projects', id: p.id, title: p.name, sub: [p.archived ? 'Archived' : null, `${open} open`, p.tags.join(', ')].filter(Boolean).join(' · '), lead: <span className="emoji" style={{ fontSize: 20, width: 24, textAlign: 'center' }}>{p.emoji}</span>, go: () => nav(`/projects/${p.id}`) });
     });
     if (kind === 'all' || kind === 'journal') st.entries.filter(e => e.body.toLowerCase().includes(ql) || e.tags.some(t => t.toLowerCase().includes(ql))).slice(0, kind === 'all' ? 4 : 30).forEach(e => {
       out.push({ kind: 'journal', id: e.id, title: e.body, sub: [fmtDayShort(e.whenAt), ...e.tags].join(' · '), lead: <Icon name="draw" style={{ color: 'var(--tertiary)' }} />, go: () => { nav('/journal'); ui.openEntry(e.id); } });
@@ -169,7 +172,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
                   <button key={r.id} className={cx('menu-item two state', my === i && 'active-key')} style={{ padding: '0 16px', gap: 16 }} onMouseEnter={() => setI(my)} onClick={() => pick(my)}>
                     {r.lead}
                     <span className="col grow" style={{ minWidth: 0 }}><span className="ellipsis t-bl">{r.title}</span><span className="sub ellipsis">{r.sub}</span></span>
-                    {k === 'journal' && st.entries.find(e => e.id === r.id)?.tags.slice(0, 1).map(t => <Tag key={t} kind={tagTone(t)}>{t}</Tag>)}
+                    {k === 'journal' && st.entries.find(e => e.id === r.id)?.tags.slice(0, 1).map(t => <Tag key={t} tone={tagChipTone(t)}>{t}</Tag>)}
                     {my === i && <span className="t-ll c-muted">↵</span>}
                   </button>
                 ); })}

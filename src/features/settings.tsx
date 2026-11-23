@@ -254,7 +254,7 @@ function Account() {
           </div>
           <div className="col gap-16" style={{ '--label-bg': 'var(--surface-low)' } as React.CSSProperties}>
             <Field label="Name" value={name} onChange={setName} onBlur={() => name.trim() && name !== st.displayName && st.setDisplayName(name.trim())} onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-            <div className="col"><Field label="Email" value={st.email} onChange={() => {}} trail={<Icon name="lock" />} style={{ opacity: 0.8 }} /><span className="field-help">Your account was set up by Harshy. Ask him to change the email.</span></div>
+            <div className="col"><Field label="Email" value={st.email} onChange={() => {}} trail={<Icon name="lock" />} style={{ opacity: 0.8 }} /><span className="field-help">Email changes are handled by your account admin.</span></div>
           </div>
         </Card>
       </div>

@@ -53,8 +53,8 @@ export function Chip({ children, icon, sel, onClick, onRemove, trail, emoji, ton
   );
 }
 
-export function Tag({ children, icon, kind, className, title }: { children: ReactNode; icon?: IconName; kind?: 'warn' | 'err' | 'ok' | 'pc' | 'ter'; className?: string; title?: string }) {
-  return <span title={title} className={cx('tag', kind, icon && 'has-lead', className)}>{icon && <Icon name={icon} />}{children}</span>;
+export function Tag({ children, icon, kind, className, title, tone }: { children: ReactNode; icon?: IconName; kind?: 'warn' | 'err' | 'ok' | 'pc' | 'ter'; className?: string; title?: string; tone?: [string, string] }) {
+  return <span title={title} style={tone ? { background: tone[0], color: tone[1] } : undefined} className={cx('tag', kind, icon && 'has-lead', className)}>{icon && <Icon name={icon} />}{children}</span>;
 }
 
 export const TONES: Record<Tone, [string, string, string]> = {
@@ -62,7 +62,7 @@ export const TONES: Record<Tone, [string, string, string]> = {
   grey: ['var(--surface-highest)', 'var(--on-surface-variant)', 'var(--outline)'],
   secondary: ['var(--secondary-container)', 'var(--on-secondary-container)', 'var(--secondary)'],
   blue: ['var(--primary-container)', 'var(--on-primary-container)', 'var(--primary)'],
-  green: ['var(--success-container)', 'var(--on-success-container)', 'var(--success)'],
+  green: ['#d6efcb', '#062100', '#386a20'],
   purple: ['var(--tertiary-container)', 'var(--on-tertiary-container)', 'var(--tertiary)'],
   amber: ['var(--warning-container)', 'var(--on-warning-container)', 'var(--warning)'],
   red: ['var(--error-container)', 'var(--on-error-container)', 'var(--error)'],

@@ -1,78 +1,84 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
+import { useUI } from '../app/ui';
 import { Icon } from '../ui/Icon';
-import { IBtn, MenuList, Popover, Seg, Chip, useAnchor, Empty } from '../ui/kit';
-import { AddTaskBar, NothingRunning, RunCard, TaskBoard, TaskRow } from './tasks';
-import { activeTask, myDayTasks } from '../lib/select';
-import { fmtDayLong, isDone, startBy } from '../lib/time';
+import { Btn, IBtn, Popover, Seg, useAnchor } from '../ui/kit';
+import { AddTaskBar, FilterButton, FilterChips, NothingRunning, ProjectLabel, RunCard, TaskBoard, TaskGroups, applyTaskFilter, EMPTY_FILTER, DueText, type TaskFilter } from './tasks';
+import { activeTask, archivedIds, isLive, myDayTasks } from '../lib/select';
+import { fmtDayLong, isDone, isOverdue, todayISO } from '../lib/time';
 import { useMiniTimer } from './mini';
+import { SampleBanner } from './common';
 
 export function MyDayPage() {
   const st = useStore();
   const mini = useMiniTimer();
-  const [tag, setTag] = useState<string | null>(null);
-  const [showDone, setShowDone] = useState(true);
-  const fa = useAnchor();
+  const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER);
   const view = st.settings.myDayView;
-  const all = myDayTasks(st.tasks);
-  const tasks = tag ? all.filter(t => st.projectById(t.projectId)?.tags.includes(tag)) : all;
-  const active = activeTask(st.tasks);
-  const open = tasks.filter(t => !isDone(t) && t.id !== active?.id)
-    .sort((a, b) => (startBy(a, st.settings)?.getTime() ?? Infinity) - (startBy(b, st.settings)?.getTime() ?? Infinity) || a.sort - b.sort);
-  const done = tasks.filter(isDone).sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''));
-  const left = all.filter(t => !isDone(t)).length;
-  const tags = useMemo(() => [...new Set(st.projects.flatMap(p => p.tags))], [st.projects]);
-  const boardCols = useMemo(() => {
-    const core = ['Not started', 'In progress', 'Done'];
-    const present = new Set(tasks.map(t => t.status));
-    return st.settings.taskStatuses.map(s => s.name).filter(n => core.includes(n) || (present.has(n) && n !== 'Archived'));
-  }, [tasks, st.settings.taskStatuses]);
+  const all = myDayTasks(st.tasks, st.projects);
+  const tasks = applyTaskFilter(all, filter, st.settings);
+  const active = activeTask(st.tasks, st.projects);
+  const left = all.filter(t => !isDone(t)).length, done = all.length - left;
 
   return (
     <>
       <div className="page-head">
-        <div className="title"><span className="t-hl">My Day</span><span className="t-bm c-muted">{fmtDayLong(new Date())} · {left} {left === 1 ? 'task' : 'tasks'} left</span></div>
+        <div className="title"><span className="t-hl">My Day</span><span className="t-bm c-muted">{fmtDayLong(new Date())} · {left} to do{done ? ` · ${done} done` : ''}</span></div>
         <div className="actions">
-          <IBtn icon="filter" label="Filter by project tag" kind={tag || fa.isOpen ? 'selected' : 'outlined'} onClick={e => fa.open(e)} />
+          <FilterButton value={filter} onChange={setFilter} showProjects />
           <Seg value={view} onChange={v => st.updateSettings({ myDayView: v })} items={[{ value: 'list', icon: 'list', tip: 'List' }, { value: 'board', icon: 'board', tip: 'Board' }]} />
         </div>
       </div>
-      {tag && <div className="row gap-8"><Chip icon="tag" sel onRemove={() => setTag(null)}>{tag}</Chip><span className="t-bs c-muted">{tasks.length} of {all.length} tasks</span></div>}
+      <SampleBanner />
+      <FilterChips value={filter} onChange={setFilter} shown={tasks.length} total={all.length} />
 
-      {view === 'board' ? <TaskBoard tasks={tasks} columns={boardCols} /> : (
-        <>
-          <div className="col gap-8">
-            <div className="section-label">In progress</div>
-            {active ? <RunCard t={active} onPopOut={() => mini.open()} /> : <NothingRunning />}
-          </div>
-          <div className="col gap-8">
-            <div className="section-label">Up next <span className="n">{open.length}</span></div>
-            {open.length ? <div className="list">{open.map(t => <TaskRow key={t.id} t={t} />)}</div>
-              : <Empty icon="sun" title={all.length ? 'Nothing else planned' : 'Plan your day'} body={all.length ? 'Add a task below, or pick one from a project with ☀.' : 'Add what you will do today. Give each task an estimate, then press ▶ and try to beat it.'} />}
-          </div>
-          {done.length > 0 && (
-            <div className="col gap-8">
-              <button className="row gap-8 state" style={{ height: 40, padding: '0 12px 0 8px', borderRadius: 20, alignSelf: 'flex-start' }} onClick={() => setShowDone(!showDone)} aria-expanded={showDone}>
-                <Icon name={showDone ? 'chevDown' : 'chevRight'} size={20} style={{ color: 'var(--on-surface-variant)' }} />
-                <span className="t-ts c-muted">Completed</span><span className="t-ts c-faint">{done.length}</span>
-              </button>
-              {showDone && <div className="list">{done.map(t => <TaskRow key={t.id} t={t} />)}</div>}
-            </div>
-          )}
-        </>
-      )}
+      <div className="col gap-8">
+        <div className="section-label">Now</div>
+        {active ? <RunCard t={active} onPopOut={() => mini.open()} /> : <NothingRunning />}
+      </div>
+      <PlanLine />
+
+      {all.length === 0
+        ? <div className="empty"><Icon name="sun" /><div className="t-tm" style={{ color: 'var(--on-surface)' }}>Plan your day</div><div className="t-bm" style={{ maxWidth: 420 }}>Add what you’ll do today. Give each task an estimate, then press ▶ and try to beat it.</div></div>
+        : view === 'board' ? <TaskBoard tasks={tasks} /> : <TaskGroups tasks={tasks} carry scope="myday" />}
       <div className="grow" />
       <div className="bottom-bar"><AddTaskBar /></div>
+    </>
+  );
+}
 
-      {fa.isOpen && (
-        <Popover anchor={fa.el} onClose={fa.close} placement="below-end">
-          <MenuList width={280} onClose={fa.close} items={[
-            { label: 'Show projects tagged' },
-            ...tags.map(t => ({ t, ic: 'tag' as const, sel: tag === t, sup: String(all.filter(x => st.projectById(x.projectId)?.tags.includes(t)).length), onClick: () => setTag(tag === t ? null : t) })),
-            { divider: true }, { t: 'Show all', ic: 'close', disabled: !tag, onClick: () => setTag(null) },
-          ]} />
+/** "3 tasks are due today or overdue but not on My Day · Plan" */
+function PlanLine() {
+  const st = useStore();
+  const ui = useUI();
+  const a = useAnchor();
+  const today = todayISO();
+  const arch = useMemo(() => archivedIds(st.projects), [st.projects]);
+  const list = st.tasks.filter(t => !isDone(t) && isLive(t, arch) && !(t.myDayDate && t.myDayDate <= today) && t.dueDate && t.dueDate <= today)
+    .sort((x, y) => (x.dueDate ?? '').localeCompare(y.dueDate ?? ''));
+  if (!list.length) return null;
+  const overdue = list.filter(t => isOverdue(t, st.settings)).length;
+  const add = (ids: string[]) => ids.forEach(id => st.updateTask(id, { myDayDate: today }));
+  return (
+    <div className="plan-line">
+      <Icon name="event" />
+      <span className="t-bm grow">{list.length} {list.length === 1 ? 'task is' : 'tasks are'} due today{overdue ? ` or overdue (${overdue} overdue)` : ''} but not on My Day.</span>
+      <Btn kind="tonal" onClick={e => a.open(e)}>Plan</Btn>
+      {a.isOpen && (
+        <Popover anchor={a.el} onClose={a.close} placement="below-end">
+          <div className="menu" style={{ width: 440, padding: '8px 0' }}>
+            <div className="row" style={{ padding: '4px 8px 4px 16px' }}><span className="t-ts grow">Add to today</span><Btn kind="text" onClick={() => { add(list.map(t => t.id)); a.close(); }}>Add all</Btn></div>
+            {list.map(t => (
+              <div key={t.id} className="row gap-12" style={{ padding: '6px 8px 6px 16px', minHeight: 56 }}>
+                <button className="col grow" style={{ textAlign: 'left', minWidth: 0 }} onClick={() => { ui.openTask(t.id); a.close(); }}>
+                  <span className="t-bl ellipsis">{t.title}</span>
+                  <span className="meta"><ProjectLabel p={st.projectById(t.projectId)} /><span className="sep">·</span><DueText t={t} settings={st.settings} /></span>
+                </button>
+                <IBtn icon="sun" label="Add to My Day" kind="pc" onClick={() => add([t.id])} />
+              </div>
+            ))}
+          </div>
         </Popover>
       )}
-    </>
+    </div>
   );
 }

@@ -12,7 +12,7 @@ export function Calendar({ value, onPick, range, maxDate, minDate, month: initMo
   const today = todayISO();
   const cells = useMemo(() => {
     const first = new Date(cursor);
-    const offset = first.getDay(); // Sunday-first like the M3 date picker
+    const offset = (first.getDay() + 6) % 7; // Monday-first, same as the Journal calendar
     const days = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
     const out: (string | null)[] = Array(offset).fill(null);
     for (let i = 1; i <= days; i++) out.push(isoDate(new Date(cursor.getFullYear(), cursor.getMonth(), i)));
@@ -30,7 +30,7 @@ export function Calendar({ value, onPick, range, maxDate, minDate, month: initMo
         </div>
       </div>
       <div className="cal-grid">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="cal-dow">{d}</div>)}
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i} className="cal-dow">{d}</div>)}
         {cells.map((iso, i) => {
           if (!iso) return <div key={i} className="cal-cell" />;
           const sel = iso === value || iso === r0 || iso === r1;
@@ -54,7 +54,6 @@ export function Calendar({ value, onPick, range, maxDate, minDate, month: initMo
 export function TimeInput({ value, onChange, label = 'Time' }: { value: string; onChange: (v: string) => void; label?: string }) {
   return (
     <label className="row gap-8 select-btn outlined" style={{ cursor: 'text', paddingRight: 8 }}>
-      <Icon name="clock" />
       <input type="time" aria-label={label} value={value} onChange={e => e.target.value && onChange(e.target.value)} step={300}
         style={{ border: 0, outline: 0, background: 'transparent', font: '400 16px/24px var(--font)', width: 120 }} />
     </label>
@@ -69,10 +68,12 @@ export function DuePicker({ date, time, onDone, onClear, title = 'Due date', req
   const [withTime, setWithTime] = useState(!!time || !!requireTime);
   const [t, setT] = useState(time ?? '18:00');
   const today = todayISO(), tomorrow = isoDate(addDays(new Date(), 1));
+  // past days can't be picked (the current value stays selectable)
+  const min = date && date < today ? date : today;
   return (
     <div className="menu" style={{ width: 340, padding: '12px 16px 16px', gap: 8 }}>
       <div className="t-lm c-muted" style={{ padding: '0 8px' }}>{title}</div>
-      <Calendar value={d} onPick={setD} />
+      <Calendar value={d} onPick={setD} minDate={min} />
       <div className="row gap-8"><Chip sel={d === today} onClick={() => setD(today)}>Today</Chip><Chip sel={d === tomorrow} onClick={() => setD(tomorrow)}>Tomorrow</Chip></div>
       {!requireTime && <div className="row" style={{ minHeight: 48, gap: 12 }}>
         <span className="t-bl grow">Include a time</span>
@@ -104,33 +105,42 @@ export function DateTimePicker({ value, onDone, onClear }: { value: string; onDo
 }
 
 // ---------- Estimate dialog (G08 / G07) ----------
-export function EstimateDialog({ initial, onSet, onClose, dueAt, avgOverrunMin, title = 'Estimate', editing }: {
-  initial: number | null; onSet: (min: number | null) => void; onClose: () => void; dueAt?: Date | null; avgOverrunMin?: number | null; title?: string; editing?: boolean;
+/** mode "start": asked when ▶ is pressed on a task without an estimate */
+export function EstimateDialog({ initial, onSet, onClose, dueAt, avgOverrunMin, title, editing, mode = 'set', onStartAnyway }: {
+  initial: number | null; onSet: (min: number | null) => void; onClose: () => void; dueAt?: Date | null; avgOverrunMin?: number | null; title?: string;
+  /** the task has started and already had an estimate: changes are logged as a re-estimate */
+  editing?: boolean; mode?: 'set' | 'start'; onStartAnyway?: () => void;
 }) {
   const [min, setMin] = useState(initial ?? 30);
   const h = Math.floor(min / 60), m = min % 60;
   const set = (x: number) => setMin(Math.max(5, Math.min(24 * 60, x)));
+  // +/- snap to multiples of 5
+  const step = (dir: 1 | -1) => set(dir > 0 ? Math.floor(min / 5) * 5 + 5 : Math.ceil(min / 5) * 5 - 5);
   const presets = [15, 30, 45, 60, 90, 120, 180];
   const sb = dueAt ? new Date(dueAt.getTime() - min * 60000) : null;
+  const suggestion = avgOverrunMin != null && avgOverrunMin > 0 ? Math.max(5, Math.round((min + avgOverrunMin) / 5) * 5) : null;
   const numStyle: React.CSSProperties = { width: 96, height: 72, borderRadius: 12, border: '1px solid var(--outline)', background: 'var(--surface-lowest)', font: '400 45px/52px var(--font)', textAlign: 'center', outline: 0 };
+  const start = mode === 'start';
+  const heading = title ?? (start ? 'Add an estimate first' : 'Estimate');
   return (
-    <Dialog onClose={onClose} width={480} label={title}>
-      <div className="row gap-12"><Icon name="hourglass" style={{ color: 'var(--primary)' }} /><span className="t-hs grow">{title}</span><IBtn icon="close" label="Close" onClick={onClose} /></div>
-      <div className="t-bm c-muted">How long will this take? The timer counts this down.</div>
+    <Dialog onClose={onClose} width={480} label={heading}>
+      <div className="row gap-12"><Icon name="hourglass" style={{ color: 'var(--primary)' }} /><span className="t-hs grow">{heading}</span><IBtn icon="close" label="Close" onClick={onClose} /></div>
+      <div className="t-bm c-muted">{start ? 'How long will this take? The timer counts this down, and Insights compare it with the time you actually take.' : 'How long will this take? The timer counts this down.'}</div>
       <div className="row" style={{ justifyContent: 'center', gap: 16, padding: '8px 0' }}>
-        <IBtn icon="remove" label="Less 5 minutes" kind="outlined" onClick={() => set(min - 5)} />
+        <IBtn icon="remove" label="Less 5 minutes" kind="outlined" onClick={() => step(-1)} />
         <div className="row gap-8" style={{ alignItems: 'flex-end' }}>
           <div className="col gap-4" style={{ alignItems: 'center' }}>
-            <input aria-label="Hours" style={numStyle} inputMode="numeric" value={h} onChange={e => set((parseInt(e.target.value) || 0) * 60 + m)} />
+            <input aria-label="Hours" style={numStyle} inputMode="numeric" value={h} onFocus={e => e.target.select()} onChange={e => set((parseInt(e.target.value) || 0) * 60 + m)} />
             <span className="t-bs c-muted">hours</span>
           </div>
           <span className="t-dm" style={{ paddingBottom: 30 }}>:</span>
           <div className="col gap-4" style={{ alignItems: 'center' }}>
-            <input aria-label="Minutes" style={numStyle} inputMode="numeric" value={String(m).padStart(2, '0')} onChange={e => set(h * 60 + Math.min(59, parseInt(e.target.value) || 0))} />
+            {/* minutes roll over: typing 90 gives 1h 30m */}
+            <MinutesInput style={numStyle} value={m} onCommit={v => set(h * 60 + v)} />
             <span className="t-bs c-muted">minutes</span>
           </div>
         </div>
-        <IBtn icon="add" label="More 5 minutes" kind="outlined" onClick={() => set(min + 5)} />
+        <IBtn icon="add" label="More 5 minutes" kind="outlined" onClick={() => step(1)} />
       </div>
       <div className="row gap-8" style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
         {presets.map(p => <Chip key={p} sel={p === min} onClick={() => setMin(p)}>{fmtMin(p)}</Chip>)}
@@ -142,21 +152,31 @@ export function EstimateDialog({ initial, onSet, onClose, dueAt, avgOverrunMin, 
           <div className="col grow"><span className="t-bs c-muted">Start by</span><span className="t-tm c-primary">{sb ? fmtClock(sb) : '—'}</span></div>
         </div>
       )}
-      {avgOverrunMin != null && avgOverrunMin > 0 && (
-        <div className="row gap-12" style={{ background: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', borderRadius: 12, padding: '12px 16px' }}>
-          <Icon name="lightbulb" />
-          <span className="t-bm">You usually run about {fmtMin(avgOverrunMin)} over. Try {fmtMin(min + Math.round(avgOverrunMin / 5) * 5)}?</span>
+      {suggestion != null && suggestion !== min && (
+        <div className="row gap-12" style={{ background: 'var(--surface-container)', borderRadius: 12, padding: '8px 8px 8px 16px' }}>
+          <Icon name="lightbulb" style={{ color: 'var(--primary)' }} />
+          <span className="t-bm grow">You usually run about {fmtMin(avgOverrunMin!)} over.</span>
+          <Chip icon="add" onClick={() => setMin(suggestion)}>Use {fmtMin(suggestion)}</Chip>
         </div>
       )}
-      {editing && <div className="t-bs c-muted">Changing the estimate after you start is logged as a re-estimate. Insights always score against the original.</div>}
+      {editing && <div className="t-bs c-muted">You’ve already started, so this is logged as a re-estimate. Insights always score against the original.</div>}
       <div className="dialog-actions">
-        {initial != null && <Btn kind="text" onClick={() => { onSet(null); onClose(); }}>Remove</Btn>}
+        {start
+          ? <Btn kind="text" onClick={() => { onStartAnyway?.(); onClose(); }}>Start without estimate</Btn>
+          : initial != null && <Btn kind="text" onClick={() => { onSet(null); onClose(); }}>Remove</Btn>}
         <span className="spacer" />
-        <Btn kind="text" onClick={onClose}>Cancel</Btn>
-        <Btn onClick={() => { onSet(min); onClose(); }}>Set estimate</Btn>
+        {!start && <Btn kind="text" onClick={onClose}>Cancel</Btn>}
+        <Btn icon={start ? 'play' : undefined} onClick={() => { onSet(min); onClose(); }}>{start ? 'Start timer' : 'Set estimate'}</Btn>
       </div>
     </Dialog>
   );
+}
+
+function MinutesInput({ value, onCommit, style }: { value: number; onCommit: (v: number) => void; style: React.CSSProperties }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => { if (draft != null) { onCommit(Math.max(0, parseInt(draft) || 0)); setDraft(null); } };
+  return <input aria-label="Minutes" style={style} inputMode="numeric" value={draft ?? String(value).padStart(2, '0')} onFocus={e => e.target.select()}
+    onChange={e => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); }} />;
 }
 
 // ---------- Remind me (G13) ----------
@@ -170,6 +190,6 @@ export function remindOptions(dueAtDate: Date | null, workStart: string, workEnd
   if (later.getDate() === now.getDate()) opts.push({ t: 'Later today', sup: fmtClock(later), at: later, ic: 'clock' });
   if (eod > now) opts.push({ t: 'End of work day', sup: fmtHHMM(workEnd), at: eod, ic: 'schedule' });
   opts.push({ t: 'Tomorrow morning', sup: fmtHHMM(workStart), at: morning, ic: 'sun' });
-  if (before && before > now) opts.push({ t: 'Before it’s due', sup: fmtClock(before), at: before, ic: 'flag' });
+  if (before && before > now) opts.push({ t: '30 min before it’s due', sup: fmtClock(before), at: before, ic: 'flag' });
   return opts;
 }

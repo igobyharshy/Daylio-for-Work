@@ -3,7 +3,8 @@ import { useStore } from '../lib/store';
 import { Icon } from '../ui/Icon';
 import { Btn, MenuList, Popover, cx, useAnchor, Empty } from '../ui/kit';
 import { Calendar } from '../ui/pickers';
-import { insights, overrunByProject, rangeFor, type InsightRange } from '../lib/select';
+import { SampleBanner } from './common';
+import { hideSample, insights, overrunByProject, rangeFor, realTasks, type InsightRange } from '../lib/select';
 import { METRICS, buildDays, compare, findPatterns, fmtY, yLabel, type YRef } from '../lib/patterns';
 import { useNavigate } from 'react-router-dom';
 import { fmtDayShort, fmtMin, fmtMonDay, todayISO } from '../lib/time';
@@ -18,8 +19,9 @@ export function InsightsPage() {
   const [custom, setCustom] = useState<[string, string] | null>(null);
   const ra = useAnchor();
   const r = rangeFor(kind, custom ?? undefined);
-  const data = useMemo(() => insights(st.tasks, st.settings, r), [st.tasks, st.settings, r.from, r.to]);
-  const byProj = useMemo(() => overrunByProject(st.tasks, st.projects, r), [st.tasks, st.projects, r.from, r.to]);
+  const tasks = useMemo(() => realTasks(st.tasks), [st.tasks]);
+  const data = useMemo(() => insights(tasks, st.settings, r), [tasks, st.settings, r.from, r.to]);
+  const byProj = useMemo(() => overrunByProject(tasks, st.projects, r), [tasks, st.projects, r.from, r.to]);
   const label = kind === 'custom' && custom ? `${fmtMonDay(custom[0])} – ${fmtMonDay(custom[1])}` : RANGES[kind];
   const periodWord = kind === 'month' ? 'this month' : kind === 'custom' ? 'in this range' : `over the last ${r.days} days`;
   const delta = data.pct != null && data.prevPct != null ? data.pct - data.prevPct : null;
@@ -31,6 +33,9 @@ export function InsightsPage() {
         <div className="title"><span className="t-hl">Insights</span><span className="t-bm c-muted">How well your estimates hold up</span></div>
         <div className="actions"><button className={cx('select-btn outlined state', ra.isOpen && 'active')} onClick={e => ra.open(e)}><Icon name="calendar" />{label}<Icon name="chevDown" /></button></div>
       </div>
+      {st.hasSample && (hideSample(st.tasks)
+        ? <span className="t-bs c-muted row gap-6"><Icon name="info" size={16} />Sample data is left out now that you have your own finished tasks.</span>
+        : <SampleBanner />)}
       <div className="tabs" role="tablist">
         {(['overview', 'patterns'] as const).map(k => <button key={k} role="tab" aria-selected={tab === k} className={cx('tab state', tab === k && 'on')} onClick={() => setTab(k)}>{k === 'overview' ? 'Overview' : 'Patterns'}</button>)}
       </div>
@@ -57,7 +62,7 @@ export function InsightsPage() {
                 <div className="bars">
                   <div className="grid-lines"><i /><i /><i /></div>
                   {data.buckets.map(b => (
-                    <div key={b.from} className={cx('bar', b.pct == null && 'none')} style={{ height: b.pct == null ? 0 : `${Math.max(2, b.pct)}%`, zIndex: 1 }}
+                    <div key={b.from} className={cx('bar', b.pct == null && 'none', b.pct === 0 && 'zero')} style={{ height: b.pct == null ? 0 : b.pct === 0 ? 4 : `${Math.max(2, b.pct)}%`, zIndex: 1 }}
                       data-tip={b.pct == null ? `${fmtDayShort(b.from)} · no finished tasks` : `${data.byWeek ? 'Week of ' : ''}${fmtDayShort(b.from)} · ${b.pct}% (${b.within} of ${b.n})`} />
                   ))}
                 </div>

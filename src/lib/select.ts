@@ -1,29 +1,63 @@
-import type { Project, Settings, Task, Tone, Entry } from './types';
+import type { Project, Settings, Task, Tone, Entry, StatusDef } from './types';
+import { CORE_STATUSES } from './types';
 import { addDays, elapsed, isDone, isoDate, isOverdue, outcome, parseDate, startOfDay, todayISO } from './time';
 
 export function statusTone(name: string, list: { name: string; tone: Tone }[]): Tone {
   return list.find(s => s.name === name)?.tone ?? 'neutral';
 }
 
-/** Tasks that appear in My Day today */
-export function myDayTasks(tasks: Task[], today = todayISO()) {
-  return tasks.filter(t =>
-    t.status !== 'Archived' &&
-    ((t.myDayDate && t.myDayDate <= today && (!t.finishedAt || isoDate(new Date(t.finishedAt)) === today)) ||
-     (t.runStartedAt && !t.finishedAt)));
+/** ids of archived projects: their tasks leave My Day, reminders and the Now card */
+export const archivedIds = (projects: Project[]) => new Set(projects.filter(p => p.archived).map(p => p.id));
+export const isLive = (t: Task, archived: Set<string>) => t.status !== 'Archived' && !(t.projectId && archived.has(t.projectId));
+
+/** once the user has 3 real finished tasks, sample data stops counting */
+export const hideSample = (tasks: Task[]) => tasks.filter(t => !t.isSample && t.finishedAt).length >= 3;
+export const realTasks = (tasks: Task[]) => (hideSample(tasks) ? tasks.filter(t => !t.isSample) : tasks);
+
+export const inMyDay = (t: Task, today = todayISO()) => !!t.myDayDate && t.myDayDate <= today;
+
+/** Tasks that appear in My Day today. A running task is always in My Day. */
+export function myDayTasks(tasks: Task[], projects: Project[] = [], today = todayISO()) {
+  const arch = archivedIds(projects);
+  return tasks.filter(t => (t.runStartedAt && !t.finishedAt) || (isLive(t, arch) &&
+    inMyDay(t, today) && (!t.finishedAt || isoDate(new Date(t.finishedAt)) === today)));
 }
 
-/** The task shown in the "In progress" card: running, else the most recently paused in-progress task in My Day. */
-export function activeTask(tasks: Task[]): Task | undefined {
+/**
+ * The task in the "Now" card: the running one; otherwise the most recently paused task in My Day,
+ * but only if the last timer action was a pause (after you tick something done, the card is empty).
+ */
+export function activeTask(tasks: Task[], projects: Project[] = []): Task | undefined {
   const running = tasks.find(t => t.runStartedAt && !t.finishedAt);
   if (running) return running;
-  return tasks
-    .filter(t => !t.finishedAt && t.status === 'In progress' && t.elapsedMs > 0)
-    .sort((a, b) => (b.firstStartedAt ?? '').localeCompare(a.firstStartedAt ?? ''))[0];
+  const arch = archivedIds(projects);
+  const lastFinish = tasks.reduce((m, t) => (t.finishedAt && t.finishedAt > m ? t.finishedAt : m), '');
+  const paused = tasks
+    .filter(t => !t.finishedAt && t.pausedAt && t.elapsedMs > 0 && inMyDay(t) && isLive(t, arch))
+    .sort((a, b) => (b.pausedAt ?? '').localeCompare(a.pausedAt ?? ''))[0];
+  return paused && paused.pausedAt! > lastFinish ? paused : undefined;
+}
+
+/** One set of groups for every list and board: settings order, core three always, others only when used. */
+export function statusGroups(statuses: StatusDef[], tasks: Task[]): { def: StatusDef; tasks: Task[] }[] {
+  const names = statuses.map(s => s.name);
+  const home = (t: Task) => (names.includes(t.status) && t.status !== 'Archived' ? t.status : t.finishedAt ? 'Done' : 'Not started');
+  const present = new Set(tasks.map(home));
+  const defs = statuses.filter(s => s.name !== 'Archived' && (CORE_STATUSES.includes(s.name) || present.has(s.name)));
+  CORE_STATUSES.forEach(c => { if (!defs.some(d => d.name === c)) defs.push({ name: c, tone: c === 'In progress' ? 'blue' : c === 'Done' ? 'green' : 'neutral' }); });
+  return defs.map(def => ({ def, tasks: tasks.filter(t => home(t) === def.name).sort((a, b) => a.sort - b.sort) }));
+}
+
+/** sort value that places a task between two neighbours */
+export function sortBetween(before?: Task, after?: Task) {
+  if (before && after) return (before.sort + after.sort) / 2;
+  if (before) return before.sort + 1;
+  if (after) return after.sort - 1;
+  return Date.now() / 1e6;
 }
 
 export const needsReflection = (tasks: Task[], now = Date.now()) =>
-  tasks.filter(t => t.reflection === 'needed' && (!t.snoozeUntil || new Date(t.snoozeUntil).getTime() <= now))
+  realTasks(tasks).filter(t => t.reflection === 'needed' && (!t.snoozeUntil || new Date(t.snoozeUntil).getTime() <= now))
     .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''));
 
 export function projectProgress(tasks: Task[], p: Project) {
@@ -32,33 +66,53 @@ export function projectProgress(tasks: Task[], p: Project) {
   return { total: list.length, done, open: list.length - done, pct: list.length ? Math.round((done / list.length) * 100) : 0 };
 }
 
-export const coverColor: Record<string, [string, string]> = {
-  blue: ['var(--primary-container)', 'var(--on-primary-container)'],
-  teal: ['#cbe6ff', '#001e30'],
-  green: ['var(--success-container)', 'var(--on-success-container)'],
-  amber: ['var(--warning-container)', 'var(--on-warning-container)'],
-  rose: ['#ffd9e2', '#3e001d'],
-  purple: ['var(--tertiary-container)', 'var(--on-tertiary-container)'],
-  grey: ['var(--surface-highest)', 'var(--on-surface-variant)'],
-};
-
-export function tagTone(tag: string): 'warn' | 'err' | 'ok' | 'ter' | undefined {
-  const t = tag.toLowerCase();
-  if (t.includes('delay')) return 'warn';
-  if (t.includes('mistake')) return 'err';
-  if (t.includes('lesson')) return 'ok';
-  if (t.includes('idea')) return 'ter';
-  return undefined;
+/** estimate vs actual for a project (finished tasks with an estimate) */
+export function projectStats(tasks: Task[], p: Project) {
+  const list = tasks.filter(t => t.projectId === p.id && t.status !== 'Archived');
+  const estMin = list.reduce((a, t) => a + (t.estimateMin ?? 0), 0);
+  const spentMs = list.reduce((a, t) => a + elapsed(t), 0);
+  const scored = list.filter(t => t.finishedAt && t.estimateMin);
+  const within = scored.filter(t => elapsed(t) <= t.estimateMin! * 60000 + 59999).length;
+  return { estMin, spentMs, scored: scored.length, pct: scored.length ? Math.round((within / scored.length) * 100) : null };
 }
-export const tagChipTone = (tag: string): [string, string] | undefined => {
-  const k = tagTone(tag);
-  if (k === 'warn') return ['var(--warning-container)', 'var(--on-warning-container)'];
-  if (k === 'err') return ['var(--error-container)', 'var(--on-error-container)'];
-  if (k === 'ok') return ['var(--success-container)', 'var(--on-success-container)'];
-  if (k === 'ter') return ['var(--tertiary-container)', 'var(--on-tertiary-container)'];
-  return undefined;
+
+/** project covers: seven distinct colours that carry no meaning (pink is reserved for "over estimate") */
+export const coverColor: Record<string, [string, string]> = {
+  purple: ['#eaddff', '#21005e'],
+  blue: ['#d6e3ff', '#001b3e'],
+  teal: ['#c6ece6', '#00201c'],
+  green: ['#d6efcb', '#062100'],
+  amber: ['#f9e5a8', '#241a00'],
+  rose: ['#ffdcc8', '#331200'],
+  grey: ['#e6e0e9', '#49454e'],
 };
-export const tagDot = (tag: string) => ({ warn: 'var(--warning)', err: 'var(--error)', ok: 'var(--success)', ter: 'var(--tertiary)' } as Record<string, string>)[tagTone(tag) ?? ''] ?? 'var(--outline)';
+export const COVER_NAMES: Record<string, string> = { purple: 'Lavender', blue: 'Blue', teal: 'Teal', green: 'Green', amber: 'Yellow', rose: 'Peach', grey: 'Grey' };
+
+/** each journal tag gets its own colour; known tags have fixed ones, others take the next free colour */
+const TAG_PALETTE: [string, string, string][] = [
+  ['#d6e3ff', '#001b3e', '#0b57d0'], // blue
+  ['#c6ece6', '#00201c', '#006a60'], // teal
+  ['#f9e5a8', '#241a00', '#7a5900'], // yellow
+  ['#ffdcc8', '#331200', '#9a4600'], // peach
+  ['#e6e0e9', '#49454e', '#79747e'], // grey
+];
+const KNOWN_TAGS: Record<string, [string, string, string]> = {
+  mistake: ['var(--error-container)', 'var(--on-error-container)', 'var(--error)'],
+  'task delay': ['var(--tertiary-container)', 'var(--on-tertiary-container)', 'var(--tertiary)'],
+  lesson: ['var(--primary-container)', 'var(--on-primary-container)', 'var(--primary)'],
+  idea: ['#c6ece6', '#00201c', '#006a60'],
+  win: ['#d6efcb', '#062100', '#386a20'],
+};
+function tagColors(tag: string): [string, string, string] {
+  const k = tag.toLowerCase();
+  if (KNOWN_TAGS[k]) return KNOWN_TAGS[k];
+  let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return TAG_PALETTE[h % TAG_PALETTE.length];
+}
+/** kept for callers that pass a Tag kind; colours now come from tagChipTone / tagDot */
+export function tagTone(_tag: string): undefined { return undefined; }
+export const tagChipTone = (tag: string): [string, string] => { const c = tagColors(tag); return [c[0], c[1]]; };
+export const tagDot = (tag: string) => tagColors(tag)[2];
 
 // ---------- Insights ----------
 export interface InsightRange { from: string; to: string; days: number }

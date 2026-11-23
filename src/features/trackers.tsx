@@ -18,13 +18,13 @@ function Stepper({ value, unit, onChange, step = 1, min = 0, max = 999 }: { valu
   const set = (n: number) => onChange(Math.max(min, Math.min(max, n)));
   return (
     <div className="row gap-8">
-      <IBtn sm icon="chevDown" kind="tonal" label={`Less ${unit}`} onClick={() => set(value - step)} />
+      <IBtn sm icon="remove" kind="outlined" label={`Less ${unit}`} onClick={() => set(value - step)} />
       <label className="row gap-4" style={{ height: 43, padding: '6px 14px', borderRadius: 10, background: 'var(--surface-high)', alignItems: 'baseline' }}>
         <input aria-label={unit} inputMode="numeric" value={value} onChange={e => set(parseInt(e.target.value.replace(/\D/g, '')) || 0)}
           style={{ width: `${Math.max(1, String(value).length) + 0.6}ch`, border: 0, outline: 0, background: 'transparent', font: '400 22px/31px var(--font)', textAlign: 'right' }} />
         <span className="t-bm c-muted">{unit}</span>
       </label>
-      <IBtn sm icon="chevUp" kind="tonal" label={`More ${unit}`} onClick={() => set(value + step)} />
+      <IBtn sm icon="add" kind="outlined" label={`More ${unit}`} onClick={() => set(value + step)} />
     </div>
   );
 }
@@ -70,7 +70,8 @@ export function TrackerInput({ t, value, onChange, size = 'md' }: { t: Tracker; 
       return (
         <div className="row gap-20" style={{ gap: 20, opacity: m == null ? 0.7 : 1 }}>
           <Stepper value={h} unit="h" max={24} onChange={x => onChange(x * 60 + mm)} />
-          <Stepper value={mm} unit="min" step={5} max={59} onChange={x => onChange(h * 60 + x)} />
+          {/* minutes roll over: 55 + 5 → next hour, typing 90 → 1h 30m */}
+          <Stepper value={mm} unit="min" step={5} min={-5} max={999} onChange={x => onChange(Math.max(0, Math.min(24 * 60, h * 60 + x)))} />
           {m != null && <Btn kind="text" onClick={() => onChange(undefined)}>Clear</Btn>}
         </div>
       );
@@ -139,7 +140,6 @@ export function EntryTrackerPills({ e }: { e: Entry }) {
 // ---------- Entry trackers (J07 / J08) ----------
 export function EntryTrackersEditor({ tags, values, onChange, compact }: { tags: string[]; values: TrackerValues; onChange: (v: TrackerValues) => void; compact?: boolean }) {
   const st = useStore();
-  const nav = useNavigate();
   const asked = entryTrackers(st.settings.trackers, tags);
   const extra = st.settings.trackers.filter(t => !t.archived && t.askOn !== 'checkin' && !asked.includes(t) && values[t.id] != null);
   const list = [...asked, ...extra];
@@ -174,17 +174,20 @@ export function EntryTrackersEditor({ tags, values, onChange, compact }: { tags:
         <span className="grow" />
         <Btn kind="text" icon="add" onClick={e => am.open(e as any)}>Add a tracker</Btn>
       </div>
-      {shown.map(t => (
-        <div key={t.id} className="row gap-16" style={{ alignItems: 'flex-start' }}>
-          <div className="col gap-2" style={{ width: 104, flex: 'none' }}><span className="t-ts">{t.name}</span><span className="t-bs c-muted">{t.type === 'group' ? `Pick ${t.multi ? 'any' : 'one'}` : t.question}</span></div>
-          <TrackerInput t={t} value={values[t.id]} onChange={v => set(t.id, v)} />
-        </div>
-      ))}
+      {shown.map(t => {
+        const removable = added.includes(t.id) || (!asked.includes(t) && values[t.id] != null);
+        return (
+          <div key={t.id} className="row gap-16" style={{ alignItems: 'flex-start' }}>
+            <div className="col gap-2" style={{ width: 104, flex: 'none' }}><span className="t-ts">{t.name}</span><span className="t-bs c-muted">{t.type === 'group' ? `Pick ${t.multi ? 'any' : 'one'}` : t.question}</span></div>
+            <div className="grow"><TrackerInput t={t} value={values[t.id]} onChange={v => set(t.id, v)} /></div>
+            {removable && <IBtn sm icon="close" label={`Remove ${t.name}`} onClick={() => { setAdded(added.filter(x => x !== t.id)); set(t.id, undefined); }} />}
+          </div>
+        );
+      })}
       {!shown.length && <span className="t-bs c-muted">No trackers are asked for these tags. Add one if you like.</span>}
       {am.isOpen && <Popover anchor={am.el} onClose={am.close} placement="below-end"><MenuList width={280} onClose={am.close} items={[
         ...optional.filter(t => !added.includes(t.id)).map(t => ({ t: t.name, ic: t.icon, sub: shortType(t), onClick: () => setAdded([...added, t.id]) })),
-        ...(optional.filter(t => !added.includes(t.id)).length ? [{ divider: true }] : []),
-        { t: 'Manage trackers…', ic: 'settings' as const, onClick: () => nav('/settings/trackers') },
+        ...(optional.filter(t => !added.includes(t.id)).length ? [] : [{ note: 'Every entry tracker is already here. Add more in Settings → Trackers.' }]),
       ]} /></Popover>}
     </div>
   );
@@ -299,6 +302,7 @@ export function CheckinDialog({ onClose, day = todayISO() }: { onClose: () => vo
 // ---------- Settings · Trackers (J01) ----------
 export function TrackersSettings() {
   const st = useStore();
+  const toast = useToast();
   const nav = useNavigate();
   const all = st.settings.trackers;
   const [edit, setEdit] = useState<Tracker | Omit<Tracker, 'id'> | null>(null);
@@ -369,6 +373,9 @@ export function TrackersSettings() {
       )}
       {menu && <Popover anchor={menu.el} onClose={() => setMenu(null)} placement="below-end"><MenuList width={220} onClose={() => setMenu(null)} items={[
         { t: 'Edit', ic: 'edit', onClick: () => setEdit(menu.t) },
+        menu.t.askOn === 'checkin'
+          ? { t: 'Ask on journal entries instead', ic: 'book', onClick: () => save(all.map(x => x.id === menu.t.id ? { ...x, askOn: 'every' } : x)) }
+          : { t: 'Ask in the daily check-in instead', ic: 'sun', onClick: () => save(all.map(x => x.id === menu.t.id ? { ...x, askOn: 'checkin' } : x)) },
         { t: 'Archive', ic: 'folder', onClick: () => save(all.map(x => x.id === menu.t.id ? { ...x, archived: true } : x)) },
       ]} /></Popover>}
       {ra.isOpen && <Popover anchor={ra.el} onClose={ra.close} placement="below-end"><MenuList width={240} onClose={ra.close} items={[
@@ -378,8 +385,9 @@ export function TrackersSettings() {
       ]} /></Popover>}
       {adding && <AddTrackerDialog onClose={() => setAdding(false)} onPick={t => { setAdding(false); setEdit(t); }} />}
       {edit && <EditTrackerDialog initial={edit} onClose={() => setEdit(null)} onSave={t => {
-        const exists = all.some(x => x.id === t.id);
-        save(exists ? all.map(x => (x.id === t.id ? t : x)) : [...all, t]);
+        const prev = all.find(x => x.id === t.id);
+        save(prev ? all.map(x => (x.id === t.id ? t : x)) : [...all, t]);
+        if (!prev || prev.archived) toast.show(`${t.name} added to ${t.askOn === 'checkin' ? 'the daily check-in' : t.askOn === 'every' ? 'every journal entry' : `entries tagged ${t.tags.join(', ')}`}`, { icon: 'checkCircle' });
         setEdit(null);
       }} onArchive={'id' in edit ? () => { save(all.map(x => (x.id === (edit as Tracker).id ? { ...x, archived: true } : x))); setEdit(null); } : undefined} />}
     </>
@@ -390,7 +398,6 @@ const fmtTime = (h: string) => { const [a, b] = h.split(':').map(Number); return
 // ---------- Add a tracker (J02) ----------
 function AddTrackerDialog({ onClose, onPick }: { onClose: () => void; onPick: (t: Omit<Tracker, 'id'> | Tracker) => void }) {
   const st = useStore();
-  const toast = useToast();
   const has = (name: string) => st.settings.trackers.find(t => t.name.toLowerCase() === name.toLowerCase());
   const types: TrackerType[] = ['points', 'levels', 'duration', 'time', 'count', 'group'];
   return (
@@ -403,7 +410,8 @@ function AddTrackerDialog({ onClose, onPick }: { onClose: () => void; onPick: (t
           const added = existing && !existing.archived;
           return (
             <button key={s.name} disabled={!!added} className={cx('row gap-12', !added && 'state')} onClick={() => {
-              if (existing?.archived) { st.updateSettings({ trackers: st.settings.trackers.map(x => x.id === existing.id ? { ...x, archived: false } : x) }); toast.show(`${s.name} restored`, { icon: 'checkCircle' }); onClose(); }
+              // archived ones come back with their history; the edit dialog asks where it should be asked
+              if (existing?.archived) onPick({ ...existing, archived: false });
               else onPick({ ...s, id: trackerId(s.name) } as Tracker);
             }}
               style={{ textAlign: 'left', padding: '10px 12px 10px 10px', borderRadius: 12, background: 'var(--surface-lowest)', border: '1px solid var(--outline-variant)' }}>

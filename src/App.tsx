@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from './lib/supabase';
@@ -11,7 +11,8 @@ import { Engine } from './app/engine';
 import { SignIn } from './app/SignIn';
 import { MyDayPage } from './features/myday';
 import { ProjectPage, ProjectsPage, NewProjectDialog } from './features/projects';
-import { EntryDialog, EntryDrawer, JournalPage, ReviewPage, WhatHappenedDialog } from './features/journal';
+import { DayPanel, JournalPage, ReviewPage, WhatHappenedDialog } from './features/journal';
+import { EstimateFirstHost } from './features/tasks';
 import { InsightsPage } from './features/insights';
 import { SettingsPage } from './features/settings';
 import { TaskDrawer } from './features/drawer';
@@ -34,16 +35,28 @@ export default function App() {
         : (
           <StoreProvider session={session} key={session.user.id}>
             <BrowserRouter>
-              <UIProvider>
+              <UIWithStore>
                 <MiniTimerProvider>
                   <Shell />
                 </MiniTimerProvider>
-              </UIProvider>
+              </UIWithStore>
             </BrowserRouter>
           </StoreProvider>
         )}
     </ToastProvider>
   );
+}
+
+function UIWithStore({ children }: { children: React.ReactNode }) {
+  const st = useStore();
+  const ref = useRef(st); ref.current = st;
+  const entryDay = useCallback((id: string) => {
+    const e = ref.current.entries.find(x => x.id === id);
+    if (!e) return undefined;
+    const d = new Date(e.whenAt);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  return <UIProvider entryDay={entryDay}>{children}</UIProvider>;
 }
 
 function Shell() {
@@ -56,16 +69,14 @@ function Shell() {
   useEffect(() => { ui.closeSheetsIfStale(); }, [loc.pathname]); // eslint-disable-line
   if (!st.loaded) return <div className="loading"><div className="col gap-16" style={{ alignItems: 'center' }}><div className="spinner" /><span className="t-bm">Loading your day…</span></div></div>;
   const task = st.taskById(ui.taskId);
-  const entry = st.entries.find(e => e.id === ui.entryId);
   const wh = st.taskById(ui.whatHappened);
-  const wide = loc.pathname === '/projects' && st.settings.projectsView === 'board';
   return (
     <div className="app">
       <TopBar />
       <div className="body">
         <NavDrawer />
         <main className="main" ref={mainRef}>
-          <div className={'content' + (wide ? ' wide' : '')}>
+          <div className="content">
             <Routes>
               <Route path="/" element={<Navigate to="/my-day" replace />} />
               <Route path="/my-day" element={<MyDayPage />} />
@@ -81,11 +92,11 @@ function Shell() {
           </div>
         </main>
         {task && <TaskDrawer t={task} key={task.id} />}
-        {!task && entry && <EntryDrawer e={entry} key={entry.id} />}
+        {!task && ui.day && <DayPanel />}
       </div>
       <Engine />
       {ui.searchOpen && <SearchOverlay onClose={() => ui.setSearchOpen(false)} />}
-      {ui.draft && <EntryDialog draft={ui.draft} onClose={ui.closeDraft} />}
+      <EstimateFirstHost />
       {wh && <WhatHappenedDialog t={wh} onClose={() => ui.openWhatHappened(null)} />}
       {ui.newProject && <NewProjectDialog onClose={() => ui.setNewProject(false)} />}
     </div>

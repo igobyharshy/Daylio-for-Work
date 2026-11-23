@@ -15,6 +15,8 @@ export interface Project {
   dueTime: string | null; // HH:MM
   tags: string[];
   isInbox: boolean;
+  /** archive is a flag, separate from status, so unarchiving keeps the status */
+  archived: boolean;
   sort: number;
   isSample: boolean;
   createdAt: string;
@@ -41,6 +43,8 @@ export interface Task {
   note: string;
   elapsedMs: number;
   runStartedAt: string | null;
+  /** last time the timer was paused (decides which paused timer the Now card shows) */
+  pausedAt: string | null;
   firstStartedAt: string | null;
   finishedAt: string | null;
   reflection: Reflection;
@@ -111,20 +115,19 @@ export interface Settings {
   trackers: Tracker[];
   checkinRemind: string | null; // HH:MM
   lastCheckinPrompt?: string;
+  /** check-in tracker shown as a colour strip on Journal calendar days */
+  calendarTracker?: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   workStart: '09:00',
   workEnd: '18:00',
   projectDefaultTags: ['Work'],
-  journalDefaults: { overEstimate: 'Task delay', late: 'Task delay', review: 'Task delay', manual: 'Mistake', fromTask: 'Task delay' },
+  journalDefaults: { overEstimate: 'Task delay', late: 'Task delay', review: 'Task delay', manual: '', fromTask: '' },
   taskStatuses: [
-    { name: 'Backlog', tone: 'grey' },
     { name: 'Not started', tone: 'neutral', note: 'Default for new tasks' },
-    { name: 'Planned', tone: 'secondary' },
     { name: 'In progress', tone: 'blue', note: 'Set when you press ▶' },
-    { name: 'Done', tone: 'green', note: 'Set when you tick the checkbox' },
-    { name: 'Reviewed', tone: 'purple' },
+    { name: 'Done', tone: 'green', note: 'Set when you tick a task. Choosing it doesn’t tick the task.' },
     { name: 'Archived', tone: 'grey', note: 'Hidden from My Day' },
   ],
   projectStatuses: [
@@ -132,10 +135,9 @@ export const DEFAULT_SETTINGS: Settings = {
     { name: 'Not started', tone: 'neutral' },
     { name: 'In progress', tone: 'blue' },
     { name: 'Done', tone: 'green' },
-    { name: 'Archived', tone: 'grey' },
   ],
   projectTags: ['Work', 'Personal', 'Graphic design', 'Motion design'],
-  journalTags: ['Task delay', 'Mistake', 'Lesson', 'Idea'],
+  journalTags: ['Task delay', 'Mistake', 'Lesson', 'Idea', 'Win'],
   notif: {
     taskReminder: true,
     estimateUsedUp: true,
@@ -151,4 +153,8 @@ export const DEFAULT_SETTINGS: Settings = {
   journalView: 'calendar',
   trackers: DEFAULT_TRACKERS,
   checkinRemind: '09:00',
+  calendarTracker: 'energy',
 };
+
+/** statuses that always show as groups / columns */
+export const CORE_STATUSES = ['Not started', 'In progress', 'Done'];

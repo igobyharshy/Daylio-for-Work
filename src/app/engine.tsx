@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { useUI } from './ui';
-import { activeTask, needsReflection } from '../lib/select';
+import { activeTask, archivedIds, isLive, needsReflection } from '../lib/select';
 import { atTime, dueLabel, elapsed, fmtMin, fmtTimer, inWorkDay, remainingMs, todayISO, totalEstimateMin } from '../lib/time';
 import type { Notif } from '../lib/types';
 import { useToast } from '../ui/Toast';
@@ -55,7 +55,7 @@ export function Engine() {
       const s = st.settings;
 
       // Estimate used up / over-estimate nudge
-      const t = activeTask(st.tasks);
+      const t = activeTask(st.tasks, st.projects);
       if (t && t.runStartedAt && t.estimateMin) {
         const rem = remainingMs(t, now);
         if (rem <= 0 && once(`ot-over-${t.id}-${totalEstimateMin(t)}`)) {
@@ -69,8 +69,10 @@ export function Engine() {
       }
 
       // Task reminders
+      const arch = archivedIds(st.projects);
       st.tasks.forEach(x => {
-        if (!x.remindAt || x.remindedAt || x.finishedAt) return;
+        // sample tasks and tasks in archived projects never remind
+        if (!x.remindAt || x.remindedAt || x.finishedAt || x.isSample || !isLive(x, arch)) return;
         if (new Date(x.remindAt).getTime() > now) return;
         st.updateTask(x.id, { remindedAt: new Date().toISOString() });
         if (!once(`ot-remind-${x.id}-${x.remindAt}`)) return;
@@ -80,7 +82,7 @@ export function Engine() {
 
       // Snoozed reflections coming due
       st.tasks.forEach(x => {
-        if (x.reflection !== 'needed' || !x.snoozeUntil) return;
+        if (x.reflection !== 'needed' || !x.snoozeUntil || x.isSample) return;
         if (new Date(x.snoozeUntil).getTime() > now) return;
         if (once(`ot-snooze-${x.id}-${x.snoozeUntil}`)) notify({ kind: 'reflection', title: 'Time to write it down', body: `${x.title} went over. Get back to this while it’s fresh.`, taskId: x.id }, s.notif.reflectionReminder, () => nav('/journal/review'), `snooze-${x.id}`);
       });
@@ -102,7 +104,7 @@ export function Engine() {
         const n = needsReflection(st.tasks, now).length;
         if (n > 0) {
           st.updateSettings({ lastReflectionPrompt: today });
-          notify({ kind: 'reflection', title: 'Reflection reminder', body: `${n} ${n === 1 ? 'task needs' : 'tasks need'} a note. Get back to this and write it down while it’s fresh.` }, s.notif.reflectionReminder, () => nav('/journal/review'), 'eod');
+          notify({ kind: 'reflection', title: 'Reflection reminder', body: 'Some tasks ran over or finished late today. Write a line on each while it’s fresh.' }, s.notif.reflectionReminder, () => nav('/journal/review'), 'eod');
         }
       }
     };
@@ -114,7 +116,7 @@ export function Engine() {
   // live timer in the browser tab title
   useEffect(() => {
     const id = setInterval(() => {
-      const t = activeTask(ref.current.st.tasks);
+      const t = activeTask(ref.current.st.tasks, ref.current.st.projects);
       if (t && t.runStartedAt) {
         const rem = remainingMs(t);
         document.title = `${t.estimateMin ? (rem < 0 ? fmtTimer(rem) + ' over' : fmtTimer(rem)) : fmtTimer(elapsed(t))} · ${t.title}`;

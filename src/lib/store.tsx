@@ -33,6 +33,12 @@ export interface Store extends StoreState {
   pauseTask: (id: ID) => void;
   finishTask: (id: ID, finishedAt?: Date) => Outcome | null;
   reopenTask: (id: ID) => void;
+  /** change the status label; leaving Done un-ticks a finished task. Never ticks. */
+  setStatus: (id: ID, status: string) => void;
+  /** remove locally now, delete on the server after the undo window; returns undo */
+  removeTask: (id: ID) => () => void;
+  removeEntry: (id: ID) => () => void;
+  removeProject: (id: ID, mode: 'move' | 'delete') => () => void;
   reEstimate: (id: ID, addMin: number) => void;
   setFinishTime: (id: ID, at: Date) => void;
   addProject: (p: Partial<Project>) => Project;
@@ -103,7 +109,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
     if (initial && (!settingsRow || !settingsRow.seeded)) {
       let inbox = projects.find(p => p.isInbox);
       if (!inbox) {
-        inbox = { id: uid(), name: 'Inbox', emoji: '📥', cover: 'grey', status: 'In progress', startDate: null, dueDate: null, dueTime: null, tags: [], isInbox: true, sort: 0, isSample: false, createdAt: new Date().toISOString() };
+        inbox = { id: uid(), name: 'Inbox', emoji: '📥', cover: 'grey', status: 'In progress', archived: false, startDate: null, dueDate: null, dueTime: null, tags: [], isInbox: true, sort: 0, isSample: false, createdAt: new Date().toISOString() };
         const { error } = await supabase.from('projects').insert({ ...projectToRow(inbox), user_id: userId });
         if (error) { fail(error); return; }
         projects = [inbox, ...projects];
@@ -128,9 +134,19 @@ export function StoreProvider({ session, children }: { session: Session; childre
         await supabase.from('user_settings').update({ seeded: true }).eq('user_id', userId);
       }
     }
+    const sd = settingsRow?.data ?? {};
+    const jd = { ...DEFAULT_SETTINGS.journalDefaults, ...(sd.journalDefaults ?? {}) };
+    // old defaults that framed every entry as a mistake: no tag by default now
+    if (jd.manual === 'Mistake') jd.manual = '';
+    if (jd.fromTask === 'Task delay') jd.fromTask = '';
     setState(s => ({
       ...s, loaded: true, projects, tasks, entries, notifs, checkins,
-      settings: { ...DEFAULT_SETTINGS, ...(settingsRow?.data ?? {}), notif: { ...DEFAULT_SETTINGS.notif, ...(settingsRow?.data?.notif ?? {}) }, journalDefaults: { ...DEFAULT_SETTINGS.journalDefaults, ...(settingsRow?.data?.journalDefaults ?? {}) } },
+      settings: {
+        ...DEFAULT_SETTINGS, ...sd, notif: { ...DEFAULT_SETTINGS.notif, ...(sd.notif ?? {}) }, journalDefaults: jd,
+        // "Archived" is a flag for projects now, not a status
+        projectStatuses: (sd.projectStatuses ?? DEFAULT_SETTINGS.projectStatuses).filter((x: { name: string }) => x.name !== 'Archived'),
+        journalTags: sd.journalTags && !sd.journalTags.includes('Win') && sd.journalTags.join() === 'Task delay,Mistake,Lesson,Idea' ? [...sd.journalTags, 'Win'] : (sd.journalTags ?? DEFAULT_SETTINGS.journalTags),
+      },
       displayName: settingsRow?.display_name ?? '',
     }));
   }, [fail, session.user.email, userId]);
@@ -188,7 +204,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
     const task: Task = {
       id: uid(), projectId: inbox?.id ?? null, title: '', status: s.settings.taskStatuses.find(x => x.note?.startsWith('Default'))?.name ?? 'Not started',
       dueDate: null, dueTime: null, estimateMin: null, reEstimates: [], myDayDate: null, remindAt: null, remindedAt: null,
-      steps: [], note: '', elapsedMs: 0, runStartedAt: null, firstStartedAt: null, finishedAt: null, reflection: 'none',
+      steps: [], note: '', elapsedMs: 0, runStartedAt: null, pausedAt: null, firstStartedAt: null, finishedAt: null, reflection: 'none',
       snoozeUntil: null, sort: maxSort + 1, isSample: false, createdAt: new Date().toISOString(), ...t,
     };
     setState(st => ({ ...st, tasks: [...st.tasks, task] }));
@@ -206,7 +222,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
   const pauseTask = useCallback((id: ID) => {
     const t = stateRef.current.tasks.find(x => x.id === id);
     if (!t || !t.runStartedAt) return;
-    updateTask(id, { elapsedMs: elapsed(t), runStartedAt: null });
+    updateTask(id, { elapsedMs: elapsed(t), runStartedAt: null, pausedAt: new Date().toISOString() });
   }, [updateTask]);
 
   const startTask = useCallback((id: ID) => {
@@ -215,10 +231,14 @@ export function StoreProvider({ session, children }: { session: Session; childre
     const t = s.tasks.find(x => x.id === id);
     if (!t) return;
     const now = new Date().toISOString();
+    const today = todayISO();
     updateTask(id, {
-      runStartedAt: now, firstStartedAt: t.firstStartedAt ?? now, status: 'In progress',
-      finishedAt: null, myDayDate: t.myDayDate ?? todayISO(),
+      runStartedAt: now, firstStartedAt: t.firstStartedAt ?? now, status: 'In progress', pausedAt: null,
+      finishedAt: null, myDayDate: t.myDayDate && t.myDayDate <= today ? t.myDayDate : today,
     });
+    // starting work moves a not-started project to In progress
+    const p = s.projects.find(x => x.id === t.projectId);
+    if (p && !p.isInbox && ['Not started', 'Backlog'].includes(p.status)) updateProject(p.id, { status: 'In progress' });
   }, [pauseTask, updateTask]);
 
   const finishTask = useCallback((id: ID, finishedAt = new Date()): Outcome | null => {
@@ -229,7 +249,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
     const done: Task = { ...t, elapsedMs: ms, runStartedAt: null, finishedAt: finishedAt.toISOString(), status: 'Done' };
     const o = outcome(done, s.settings);
     const needs = t.reflection === 'none' && ((o.diffMin ?? 0) > 0 || (o.lateMin ?? 0) > 0);
-    updateTask(id, { elapsedMs: ms, runStartedAt: null, finishedAt: done.finishedAt, status: 'Done', reflection: needs ? 'needed' : t.reflection });
+    updateTask(id, { elapsedMs: ms, runStartedAt: null, pausedAt: null, finishedAt: done.finishedAt, status: 'Done', reflection: needs ? 'needed' : t.reflection });
     return o;
   }, [updateTask]);
 
@@ -238,6 +258,41 @@ export function StoreProvider({ session, children }: { session: Session; childre
     if (!t) return;
     updateTask(id, { finishedAt: null, status: t.elapsedMs > 0 ? 'In progress' : 'Not started', reflection: t.reflection === 'needed' ? 'none' : t.reflection });
   }, [updateTask]);
+
+  const setStatus = useCallback((id: ID, status: string) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t || t.status === status) return;
+    if (t.finishedAt && status !== 'Done') updateTask(id, { status, finishedAt: null, reflection: t.reflection === 'needed' ? 'none' : t.reflection });
+    else updateTask(id, { status });
+  }, [updateTask]);
+
+  // ---------- deletes with an undo window ----------
+  const pending = useRef(new Map<string, number>());
+  const later = useCallback((key: string, run: () => void) => {
+    const id = window.setTimeout(() => { pending.current.delete(key); run(); }, 6500);
+    pending.current.set(key, id);
+    return () => { window.clearTimeout(id); pending.current.delete(key); };
+  }, []);
+  const removeTask = useCallback((id: ID) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t) return () => {};
+    setState(s => ({ ...s, tasks: s.tasks.filter(x => x.id !== id) }));
+    const cancel = later('t' + id, () => deleteTask(id));
+    return () => { cancel(); setState(s => ({ ...s, tasks: s.tasks.some(x => x.id === id) ? s.tasks : [...s.tasks, t] })); };
+  }, [later]);
+  const removeEntry = useCallback((id: ID) => {
+    const e = stateRef.current.entries.find(x => x.id === id);
+    if (!e) return () => {};
+    setState(s => ({ ...s, entries: s.entries.filter(x => x.id !== id) }));
+    const cancel = later('e' + id, () => write(supabase.from('journal_entries').delete().eq('id', id)));
+    return () => { cancel(); setState(s => ({ ...s, entries: s.entries.some(x => x.id === id) ? s.entries : [e, ...s.entries] })); };
+  }, [later, write]);
+  // flush pending deletes if the tab closes during the undo window
+  useEffect(() => {
+    const flush = () => { pending.current.forEach(id => window.clearTimeout(id)); };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, []);
 
   const reEstimate = useCallback((id: ID, addMin: number) => {
     const t = stateRef.current.tasks.find(x => x.id === id);
@@ -256,7 +311,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
   const addProject = useCallback((p: Partial<Project>): Project => {
     const s = stateRef.current;
     const proj: Project = {
-      id: uid(), name: 'Untitled project', emoji: '📁', cover: 'blue', status: 'Not started', startDate: null, dueDate: null, dueTime: null,
+      id: uid(), name: 'Untitled project', emoji: '📁', cover: 'purple', status: 'Not started', archived: false, startDate: null, dueDate: null, dueTime: null,
       tags: [...s.settings.projectDefaultTags], isInbox: false, sort: s.projects.reduce((m, x) => Math.max(m, x.sort), 0) + 1,
       isSample: false, createdAt: new Date().toISOString(), ...p,
     };
@@ -269,6 +324,27 @@ export function StoreProvider({ session, children }: { session: Session; childre
     patchList('projects', id, patch);
     write(supabase.from('projects').update(projectToRow(patch)).eq('id', id));
   }, [write]);
+
+  const removeProject = useCallback((id: ID, mode: 'move' | 'delete') => {
+    const s = stateRef.current;
+    const inbox = s.projects.find(p => p.isInbox);
+    const p = s.projects.find(x => x.id === id);
+    if (!inbox || !p || id === inbox.id) return () => {};
+    const own = s.tasks.filter(t => t.projectId === id);
+    setState(st => ({
+      ...st, projects: st.projects.filter(x => x.id !== id),
+      tasks: mode === 'delete' ? st.tasks.filter(t => t.projectId !== id) : st.tasks.map(t => (t.projectId === id ? { ...t, projectId: inbox.id } : t)),
+    }));
+    const cancel = later('p' + id, async () => {
+      if (mode === 'delete') await write(supabase.from('tasks').delete().eq('project_id', id));
+      else await write(supabase.from('tasks').update({ project_id: inbox.id }).eq('project_id', id));
+      await write(supabase.from('projects').delete().eq('id', id));
+    });
+    return () => {
+      cancel();
+      setState(st => ({ ...st, projects: [...st.projects.filter(x => x.id !== id), p], tasks: [...st.tasks.filter(t => !own.some(o => o.id === t.id)), ...own] }));
+    };
+  }, [later, write]);
 
   const deleteProject = useCallback((id: ID) => {
     const s = stateRef.current;
@@ -373,13 +449,13 @@ export function StoreProvider({ session, children }: { session: Session; childre
       inbox: state.projects.find(p => p.isInbox),
       projectById: id => (id ? pMap.get(id) : undefined),
       taskById: id => (id ? tMap.get(id) : undefined),
-      addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime,
+      addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, setStatus, removeTask, removeEntry, removeProject,
       addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead,
       updateSettings, setDisplayName, clearSample, saveCheckin, skipCheckin,
       checkinFor: (day: string) => state.checkins.find(c => c.day === day),
       hasSample: state.projects.some(p => p.isSample) || state.tasks.some(t => t.isSample) || state.entries.some(e => e.isSample) || state.checkins.some(c => c.isSample),
     };
-  }, [state, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
+  }, [state, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
