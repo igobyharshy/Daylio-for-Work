@@ -1,5 +1,7 @@
 # Ontrack — working notes for Claude
 
+> Full context for new chats: `docs/HANDOFF.md` (read it first).
+
 - Design source of truth: Penpot page **“Hi-fi v1 · Material 3 New”** (purple M3 baseline). Not the “Material 3 Blue” page.
 - Colour meaning: tertiary/pink = estimate ran out / over; error/red = deadline passed or Mistake; primary = running, under estimate.
 - Product rules: one countdown (the estimate); Insights score against the ORIGINAL estimate; re-estimates are logged; Due never counts down; Inbox can't be deleted; new tasks default due today; tasks added from My Day go to My Day + Inbox.
