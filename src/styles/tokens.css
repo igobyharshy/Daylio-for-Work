@@ -13,12 +13,15 @@
   --tertiary-container: #ffd8e4;
   --on-tertiary-container: #370b1e;
   --error: #b3261e;
+  --on-error: #ffffff;
   --error-container: #f9dedc;
   --on-error-container: #410e0b;
+  --on-tertiary: #ffffff;
   /* "ran over estimate" uses tertiary in this design; "under / early" uses primary */
   --warning: #7d5260;
   --warning-container: #ffd8e4;
   --on-warning-container: #370b1e;
+  --on-warning: #ffffff;
   --success: #6750a4;
   --success-container: #eaddff;
   --on-success-container: #21005e;
@@ -47,32 +50,109 @@
   --elev-2: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
   --elev-3: 0 1px 3px rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
 
+  /* meaning-free accent palettes (project covers, journal tags): [bg, text, dot] */
+  --c-purple-bg: #eaddff; --c-purple-fg: #21005e; --c-purple-dot: #6750a4;
+  --c-blue-bg: #d6e3ff; --c-blue-fg: #001b3e; --c-blue-dot: #0b57d0;
+  --c-teal-bg: #c6ece6; --c-teal-fg: #00201c; --c-teal-dot: #006a60;
+  --c-green-bg: #d6efcb; --c-green-fg: #062100; --c-green-dot: #386a20;
+  --c-yellow-bg: #f9e5a8; --c-yellow-fg: #241a00; --c-yellow-dot: #7a5900;
+  --c-peach-bg: #ffdcc8; --c-peach-fg: #331200; --c-peach-dot: #9a4600;
+  --c-grey-bg: #e6e0e9; --c-grey-fg: #49454e; --c-grey-dot: #79747e;
+  --kcard-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  color-scheme: light;
+
   --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1);
 
-  --topbar-h: 64px;
-  --nav-w: 280px;
+    --nav-w: 248px;
   --content-w: 1080px;
-  --sheet-w: 440px;
+  --sheet-w: 400px;
 }
 
-/* type scale */
-.t-dl { font: 400 57px/64px var(--font); letter-spacing: -0.25px; }
-.t-dm { font: 400 45px/52px var(--font); }
-.t-ds { font: 400 36px/44px var(--font); }
-.t-hl { font: 400 32px/40px var(--font); }
-.t-hm { font: 400 28px/36px var(--font); }
-.t-hs { font: 400 24px/32px var(--font); }
-.t-tl { font: 400 22px/28px var(--font); }
-.t-tm { font: 500 16px/24px var(--font); letter-spacing: 0.15px; }
-.t-ts { font: 500 14px/20px var(--font); letter-spacing: 0.1px; }
-.t-bl { font: 400 16px/24px var(--font); letter-spacing: 0.15px; }
-.t-bm { font: 400 14px/20px var(--font); letter-spacing: 0.25px; }
-.t-bs { font: 400 12px/16px var(--font); letter-spacing: 0.4px; }
-.t-ll { font: 500 14px/20px var(--font); letter-spacing: 0.1px; }
-.t-lm { font: 500 12px/16px var(--font); letter-spacing: 0.5px; }
-.t-ls { font: 500 11px/16px var(--font); letter-spacing: 0.5px; }
+
+/* ---------- Dark theme ----------
+   Material 3 baseline dark scheme (same purple seed as the light scheme), used the way m3.material.io uses it:
+   near-black neutral surfaces in small tonal steps, raised things get LIGHTER (not shadowed),
+   colour only for selection and accents, primary as light text/actions, off-white text.
+   Role note: in light, "surface-lowest" is our raised-card colour (white on tinted containers). In dark the raised
+   card must be lighter than its container, so it maps to surface-container-high, and chips/fields one step above. */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --primary: #d0bcff;
+  --on-primary: #381e72;
+  --primary-container: #4f378b;
+  --on-primary-container: #eaddff;
+  --inverse-primary: #6750a4;
+  --secondary: #ccc2dc;
+  --secondary-container: #4a4458;
+  --on-secondary-container: #e8def8;
+  --tertiary: #efb8c8;
+  --on-tertiary: #492532;
+  --tertiary-container: #633b48;
+  --on-tertiary-container: #ffd8e4;
+  --error: #f2b8b5;
+  --on-error: #601410;
+  --error-container: #8c1d18;
+  --on-error-container: #f9dedc;
+  --warning: #efb8c8;
+  --on-warning: #492532;
+  --warning-container: #633b48;
+  --on-warning-container: #ffd8e4;
+  --success: #d0bcff;
+  --success-container: #4f378b;
+  --on-success-container: #eaddff;
+
+  --surface: #141218;            /* surface */
+  --surface-dim: #141218;
+  --surface-low: #1d1b20;        /* surface-container-low: rows, sidebar, sheets, cards */
+  --surface-container: #211f26;  /* surface-container: hover, menus, notices */
+  --surface-lowest: #2b2930;     /* raised card on a container -> surface-container-high */
+  --surface-high: #36343b;       /* chips, tags, fields, add bar -> surface-container-highest */
+  --surface-highest: #3b383e;    /* strongest fill -> surface-bright */
+  --on-surface: #e6e0e9;
+  --on-surface-variant: #cac4d0;
+  --outline: #938f99;
+  --outline-variant: #49454f;
+  --inverse-surface: #e6e0e9;
+  --inverse-on-surface: #322f35;
+  --scrim: rgb(0 0 0 / 0.55);
+
+  --hover: rgb(230 224 233 / 0.08);
+  --press: rgb(230 224 233 / 0.12);
+  --primary-hover: rgb(208 188 255 / 0.08);
+
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 1px 3px 1px rgb(0 0 0 / 0.3);
+  --elev-2: 0 1px 2px rgb(0 0 0 / 0.5), 0 2px 6px 2px rgb(0 0 0 / 0.3);
+  --elev-3: 0 1px 3px rgb(0 0 0 / 0.5), 0 4px 8px 3px rgb(0 0 0 / 0.3);
+  --kcard-shadow: none;
+
+  /* accent palettes at M3 dark container tones: bg tone 30, text tone 90, dot tone 80 */
+  --c-purple-bg: #4f378b; --c-purple-fg: #eaddff; --c-purple-dot: #d0bcff;
+  --c-blue-bg: #284777; --c-blue-fg: #d6e3ff; --c-blue-dot: #abc7ff;
+  --c-teal-bg: #1d4d47; --c-teal-fg: #c6ece6; --c-teal-dot: #8bd5ca;
+  --c-green-bg: #2c4f1e; --c-green-fg: #d6efcb; --c-green-dot: #9cd67d;
+  --c-yellow-bg: #574500; --c-yellow-fg: #f9e5a8; --c-yellow-dot: #e6c449;
+  --c-peach-bg: #6b3a1d; --c-peach-fg: #ffdcc8; --c-peach-dot: #ffb68e;
+  --c-grey-bg: #36343b; --c-grey-fg: #e6e0e9; --c-grey-dot: #938f99;
+}
+
+/* type scale: compact desktop ramp (UX pass 2). Same role names as M3, one size step down so lists fit more. */
+.t-dl { font: 400 44px/52px var(--font); letter-spacing: -0.25px; }
+.t-dm { font: 400 36px/44px var(--font); }
+.t-ds { font: 400 30px/38px var(--font); }
+.t-hl { font: 500 22px/28px var(--font); letter-spacing: 0; }
+.t-hm { font: 500 22px/28px var(--font); }
+.t-hs { font: 400 20px/28px var(--font); }
+.t-tl { font: 500 17px/24px var(--font); }
+.t-tm { font: 500 14px/20px var(--font); letter-spacing: 0.1px; }
+.t-ts { font: 500 13px/18px var(--font); letter-spacing: 0.1px; }
+.t-bl { font: 400 14px/20px var(--font); letter-spacing: 0.1px; }
+.t-bm { font: 400 13px/18px var(--font); letter-spacing: 0.1px; }
+.t-bs { font: 400 12px/16px var(--font); letter-spacing: 0.2px; }
+.t-ll { font: 500 13px/18px var(--font); letter-spacing: 0.1px; }
+.t-lm { font: 500 12px/16px var(--font); letter-spacing: 0.3px; }
+.t-ls { font: 500 11px/14px var(--font); letter-spacing: 0.4px; }
 
 .c-muted { color: var(--on-surface-variant); }
 .c-faint { color: var(--outline); }

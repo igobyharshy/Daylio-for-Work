@@ -209,7 +209,7 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   if (!running) meta.push(<span className="m"><Icon name="pause" />Paused</span>);
   return (
     <div className={cx('run-card', amber && 'amber')}>
-      <Ring pct={amber ? 100 : pct} size={64} stroke={6} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? '#ffb1c8' : 'var(--surface-lowest)'}>
+      <Ring pct={amber ? 100 : pct} size={44} stroke={4} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? 'color-mix(in srgb, var(--warning) 35%, var(--warning-container))' : 'var(--surface-lowest)'}>
         <Icon name={amber ? 'warn' : running ? 'hourglass' : 'pause'} style={{ color: amber ? 'var(--warning)' : 'var(--primary)' }} />
       </Ring>
       <button className="col grow" style={{ textAlign: 'left', gap: 4, minWidth: 0 }} onClick={() => ui.openTask(t.id)}>

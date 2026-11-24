@@ -117,6 +117,8 @@ export interface Settings {
   lastCheckinPrompt?: string;
   /** check-in tracker shown as a colour strip on Journal calendar days */
   calendarTracker?: string | null;
+  /** colour theme; 'system' follows the device */
+  theme?: 'light' | 'dark' | 'system';
 }
 
 export const DEFAULT_SETTINGS: Settings = {

@@ -6,7 +6,7 @@ import { StoreProvider, useStore } from './lib/store';
 import { ToastProvider } from './ui/Toast';
 import { TooltipLayer } from './ui/kit';
 import { UIProvider, useUI } from './app/ui';
-import { NavDrawer, SearchOverlay, TopBar } from './app/shell';
+import { SearchOverlay, Sidebar } from './app/shell';
 import { Engine } from './app/engine';
 import { SignIn } from './app/SignIn';
 import { MyDayPage } from './features/myday';
@@ -72,9 +72,8 @@ function Shell() {
   const wh = st.taskById(ui.whatHappened);
   return (
     <div className="app">
-      <TopBar />
       <div className="body">
-        <NavDrawer />
+        <Sidebar />
         <main className="main" ref={mainRef}>
           <div className="content">
             <Routes>

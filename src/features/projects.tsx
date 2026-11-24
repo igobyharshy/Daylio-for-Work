@@ -129,13 +129,13 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog onClose={onClose} width={560} className="" label="New project">
       <div style={{ margin: -24, marginBottom: 0, position: 'relative' }}>
-        <div style={{ height: 128, background: coverColor[cover][0], borderRadius: '28px 28px 0 0', position: 'relative', display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', padding: 12 }}>
+        <div style={{ height: 112, background: coverColor[cover][0], borderRadius: '24px 24px 0 0', position: 'relative', display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', padding: 12 }}>
           <Btn kind="elevated" icon="palette" onClick={e => ca.open(e as any)}>Cover</Btn>
         </div>
         <button onClick={e => ea.open(e)} aria-label="Change icon" data-tip="Change icon"
           style={{ position: 'absolute', left: 24, top: 92, width: 72, height: 72, borderRadius: 16, background: 'var(--surface-lowest)', boxShadow: 'var(--elev-2)', display: 'grid', placeItems: 'center' }}>
           <span className="emoji" style={{ fontSize: 36 }}>{emoji}</span>
-          <span style={{ position: 'absolute', right: -6, bottom: -6, width: 28, height: 28, borderRadius: 14, background: 'var(--primary)', color: '#fff', display: 'grid', placeItems: 'center' }}><Icon name="edit" size={16} /></span>
+          <span style={{ position: 'absolute', right: -6, bottom: -6, width: 28, height: 28, borderRadius: 14, background: 'var(--primary)', color: 'var(--on-primary)', display: 'grid', placeItems: 'center' }}><Icon name="edit" size={16} /></span>
         </button>
       </div>
       <div style={{ height: 40 }} />
@@ -423,12 +423,12 @@ export function ProjectPage() {
         <div className="plan-line"><Icon name="inbox" /><span className="t-bm grow">This project is archived. Its tasks are off My Day and won’t send reminders.</span><Btn kind="tonal" onClick={() => acts.archive(p)}>Unarchive</Btn></div>
       )}
       {!p.isInbox && (
-        <div style={{ position: 'relative', marginBottom: 24 }}>
-          <div className="row" style={{ height: 120, borderRadius: 24, background: coverColor[p.cover]?.[0], justifyContent: 'flex-end', alignItems: 'flex-start', padding: 12 }}>
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <div className="row" style={{ height: 80, borderRadius: 16, background: coverColor[p.cover]?.[0], justifyContent: 'flex-end', alignItems: 'flex-start', padding: 12 }}>
             <Btn kind="elevated" icon="palette" onClick={e => ca.open(e as any)}>Cover</Btn>
           </div>
-          <button onClick={e => ea.open(e)} aria-label="Change icon" data-tip="Change icon" style={{ position: 'absolute', left: 24, bottom: -32, width: 72, height: 72, borderRadius: 16, background: 'var(--surface-lowest)', boxShadow: 'var(--elev-2)', display: 'grid', placeItems: 'center' }}>
-            <span className="emoji" style={{ fontSize: 36 }}>{p.emoji}</span>
+          <button onClick={e => ea.open(e)} aria-label="Change icon" data-tip="Change icon" style={{ position: 'absolute', left: 20, bottom: -22, width: 52, height: 52, borderRadius: 12, background: 'var(--surface-lowest)', boxShadow: 'var(--elev-2)', display: 'grid', placeItems: 'center' }}>
+            <span className="emoji" style={{ fontSize: 28 }}>{p.emoji}</span>
           </button>
         </div>
       )}

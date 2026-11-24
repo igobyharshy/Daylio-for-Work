@@ -78,30 +78,30 @@ export function projectStats(tasks: Task[], p: Project) {
 
 /** project covers: seven distinct colours that carry no meaning (pink is reserved for "over estimate") */
 export const coverColor: Record<string, [string, string]> = {
-  purple: ['#eaddff', '#21005e'],
-  blue: ['#d6e3ff', '#001b3e'],
-  teal: ['#c6ece6', '#00201c'],
-  green: ['#d6efcb', '#062100'],
-  amber: ['#f9e5a8', '#241a00'],
-  rose: ['#ffdcc8', '#331200'],
-  grey: ['#e6e0e9', '#49454e'],
+  purple: ['var(--c-purple-bg)', 'var(--c-purple-fg)'],
+  blue: ['var(--c-blue-bg)', 'var(--c-blue-fg)'],
+  teal: ['var(--c-teal-bg)', 'var(--c-teal-fg)'],
+  green: ['var(--c-green-bg)', 'var(--c-green-fg)'],
+  amber: ['var(--c-yellow-bg)', 'var(--c-yellow-fg)'],
+  rose: ['var(--c-peach-bg)', 'var(--c-peach-fg)'],
+  grey: ['var(--c-grey-bg)', 'var(--c-grey-fg)'],
 };
 export const COVER_NAMES: Record<string, string> = { purple: 'Lavender', blue: 'Blue', teal: 'Teal', green: 'Green', amber: 'Yellow', rose: 'Peach', grey: 'Grey' };
 
 /** each journal tag gets its own colour; known tags have fixed ones, others take the next free colour */
 const TAG_PALETTE: [string, string, string][] = [
-  ['#d6e3ff', '#001b3e', '#0b57d0'], // blue
-  ['#c6ece6', '#00201c', '#006a60'], // teal
-  ['#f9e5a8', '#241a00', '#7a5900'], // yellow
-  ['#ffdcc8', '#331200', '#9a4600'], // peach
-  ['#e6e0e9', '#49454e', '#79747e'], // grey
+  ['var(--c-blue-bg)', 'var(--c-blue-fg)', 'var(--c-blue-dot)'],
+  ['var(--c-teal-bg)', 'var(--c-teal-fg)', 'var(--c-teal-dot)'],
+  ['var(--c-yellow-bg)', 'var(--c-yellow-fg)', 'var(--c-yellow-dot)'],
+  ['var(--c-peach-bg)', 'var(--c-peach-fg)', 'var(--c-peach-dot)'],
+  ['var(--c-grey-bg)', 'var(--c-grey-fg)', 'var(--c-grey-dot)'],
 ];
 const KNOWN_TAGS: Record<string, [string, string, string]> = {
   mistake: ['var(--error-container)', 'var(--on-error-container)', 'var(--error)'],
   'task delay': ['var(--tertiary-container)', 'var(--on-tertiary-container)', 'var(--tertiary)'],
   lesson: ['var(--primary-container)', 'var(--on-primary-container)', 'var(--primary)'],
-  idea: ['#c6ece6', '#00201c', '#006a60'],
-  win: ['#d6efcb', '#062100', '#386a20'],
+  idea: ['var(--c-teal-bg)', 'var(--c-teal-fg)', 'var(--c-teal-dot)'],
+  win: ['var(--c-green-bg)', 'var(--c-green-fg)', 'var(--c-green-dot)'],
 };
 function tagColors(tag: string): [string, string, string] {
   const k = tag.toLowerCase();

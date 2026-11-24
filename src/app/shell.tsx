@@ -4,45 +4,95 @@ import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { useUI } from './ui';
 import { Icon } from '../ui/Icon';
-import { Btn, Chip, IBtn, MenuList, Popover, Tag, cx, useAnchor } from '../ui/kit';
+import { Btn, Chip, IBtn, Popover, Tag, cx, useAnchor } from '../ui/kit';
 import { myDayTasks, needsReflection, tagChipTone } from '../lib/select';
 import { TimerChip } from '../features/common';
 import { fmtClock, fmtDayShort, isDone, relDay, isoDate, cap } from '../lib/time';
 
-export function TopBar() {
+/** Apply the colour theme to <html data-theme>; 'system' follows the device. Mirrors to localStorage so the next load paints right away. */
+export function useApplyTheme(theme: 'light' | 'dark' | 'system' = 'light') {
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      const eff = theme === 'system' ? (mq.matches ? 'dark' : 'light') : theme;
+      document.documentElement.dataset.theme = eff;
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', eff === 'dark' ? '#141218' : '#fffbfe');
+      try { localStorage.setItem('ontrack-theme', theme); } catch { /* private mode */ }
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [theme]);
+}
+export const effectiveTheme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+
+/** Left sidebar (replaces the old top bar): brand + bell + theme, search, pages, timer, profile. */
+export function Sidebar() {
   const st = useStore();
   const ui = useUI();
   const nav = useNavigate();
-  const ba = useAnchor(), aa = useAnchor();
+  const loc = useLocation();
+  const ba = useAnchor(), pa = useAnchor();
   const unread = st.notifs.filter(n => !n.readAt).length;
+  const theme = st.settings.theme ?? 'light';
+  useApplyTheme(theme);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); ui.setSearchOpen(true); } };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [ui]);
+  const [, force] = useState(0);
+  const isDark = theme === 'dark' || (theme === 'system' && effectiveTheme() === 'dark');
+  const toggleTheme = () => { st.updateSettings({ theme: isDark ? 'light' : 'dark' }); force(x => x + 1); };
+  const name = st.displayName || 'You';
   const initial = (st.displayName || st.email || '?').charAt(0).toUpperCase();
-  const loc = useLocation();
   return (
-    <header className="topbar">
-      <button className="brand state" onClick={() => nav('/my-day')} aria-label="Ontrack home">
-        <span className="brand-logo"><Icon name="timer" /></span><span className="t-tl">Ontrack</span>
+    <aside className="side" aria-label="Sidebar">
+      <div className="side-top">
+        <button className="side-brand state" onClick={() => nav('/my-day')} aria-label="Ontrack home">
+          <span className="brand-logo"><Icon name="timer" /></span><span className="t-ts">Ontrack</span>
+        </button>
+        <IBtn sm icon="bell" label="Notifications" badge={st.settings.notif.bellBadge && unread ? unread : null} kind={ba.isOpen ? 'selected' : 'standard'} onClick={e => ba.open(e)} />
+        <IBtn sm icon={isDark ? 'light' : 'dark'} label={isDark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme} />
+      </div>
+      <button className="side-search state" onClick={() => ui.setSearchOpen(true)} aria-label="Search (Ctrl K)">
+        <Icon name="search" /><span className="grow">Search</span><span className="keycap">Ctrl K</span>
       </button>
-      <button className="searchbar" onClick={() => ui.setSearchOpen(true)}><Icon name="search" /><span className="t-bl">Search tasks, projects, journal</span><span className="keycap">Ctrl K</span></button>
-      <div className="top-actions">
-        <TimerChip />
-        <IBtn icon="bell" label="Notifications" badge={st.settings.notif.bellBadge && unread ? unread : null} kind={ba.isOpen ? 'selected' : 'standard'} onClick={e => ba.open(e)} />
-        <IBtn icon="settings" label="Settings" kind={loc.pathname.startsWith('/settings') ? 'selected' : 'standard'} onClick={() => nav('/settings/work-day')} />
-        <button className="avatar state" aria-label="Account" onClick={e => aa.open(e)} data-tip={st.displayName || st.email}>{initial}</button>
+      <NavDrawer />
+      <div className="side-timer-slot"><TimerChip side /></div>
+      <div className="grow" />
+      <div className="side-foot">
+        <button className={cx('side-profile state', pa.isOpen && 'open')} onClick={e => pa.open(e)} aria-label="Account menu" aria-expanded={pa.isOpen}>
+          <span className="avatar sm">{initial}</span>
+          <span className="t-ts ellipsis grow">{name}</span>
+          <Icon name="unfold" size={18} className="c-muted" />
+        </button>
+        <IBtn sm icon="settings" label="Settings" kind={loc.pathname.startsWith('/settings') ? 'selected' : 'standard'} onClick={() => nav('/settings/work-day')} />
       </div>
       {ba.isOpen && <NotificationsPanel anchor={ba.el} onClose={ba.close} />}
-      {aa.isOpen && (
-        <Popover anchor={aa.el} onClose={aa.close} placement="below-end">
-          <MenuList width={280} onClose={aa.close}
-            header={<div className="row gap-12" style={{ padding: '8px 12px 12px' }}><span className="avatar">{initial}</span><span className="col" style={{ minWidth: 0 }}><span className="t-tm ellipsis">{st.displayName || 'You'}</span><span className="t-bs c-muted ellipsis">{st.email}</span></span></div>}
-            items={[{ divider: true }, { t: 'Account settings', ic: 'settings', onClick: () => nav('/settings/account') }, { t: 'Sign out', ic: 'logout', onClick: () => supabase.auth.signOut() }]} />
+      {pa.isOpen && (
+        <Popover anchor={pa.el} onClose={pa.close} placement="above-start">
+          <div className="menu profile-menu" role="menu" style={{ width: 272 }}>
+            <div className="row gap-12" style={{ padding: '8px 12px 10px' }}>
+              <span className="avatar">{initial}</span>
+              <span className="col" style={{ minWidth: 0 }}><span className="t-ts ellipsis">{name}</span><span className="t-bs c-muted ellipsis">{st.email}</span></span>
+            </div>
+            <div className="divider" />
+            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/work-day'); pa.close(); }}><Icon name="settings" />Settings</button>
+            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/account'); pa.close(); }}><Icon name="person" />Account</button>
+            <div className="divider" />
+            <div className="menu-label">Theme</div>
+            <div className="theme-seg" role="radiogroup" aria-label="Theme">
+              {([['light', 'light', 'Light'], ['dark', 'dark', 'Dark'], ['system', 'autoTheme', 'System']] as const).map(([v, ic, l]) => (
+                <button key={v} role="radio" aria-checked={theme === v} className={cx('state', theme === v && 'on')} onClick={() => st.updateSettings({ theme: v })}><Icon name={ic} />{l}</button>
+              ))}
+            </div>
+            <div className="divider" />
+            <button role="menuitem" className="menu-item state" onClick={() => { pa.close(); supabase.auth.signOut(); }}><Icon name="logout" />Sign out</button>
+          </div>
         </Popover>
       )}
-    </header>
+    </aside>
   );
 }
 
@@ -55,8 +105,8 @@ function NotificationsPanel({ anchor, onClose }: { anchor: HTMLElement | null; o
   const icon = { reminder: 'bellOn', reflection: 'review', over: 'warn', info: 'info' } as const;
   const tone = { reminder: ['var(--primary-container)', 'var(--primary)'], reflection: ['var(--tertiary-container)', 'var(--tertiary)'], over: ['var(--warning-container)', 'var(--warning)'], info: ['var(--surface-high)', 'var(--on-surface-variant)'] } as const;
   return (
-    <Popover anchor={anchor} onClose={onClose} placement="below-end">
-      <div className="menu" style={{ width: 420, padding: '8px 0' }}>
+    <Popover anchor={anchor} onClose={onClose} placement="below-start">
+      <div className="menu" style={{ width: 400, padding: '8px 0' }}>
         <div className="row" style={{ padding: '8px 8px 8px 24px', minHeight: 48 }}>
           <span className="t-tm grow">Notifications</span>
           <Btn kind="text" disabled={!st.notifs.some(n => !n.readAt)} onClick={() => st.markNotifsRead()}>Mark all read</Btn>

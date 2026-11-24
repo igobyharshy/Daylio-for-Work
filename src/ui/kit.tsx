@@ -62,7 +62,7 @@ export const TONES: Record<Tone, [string, string, string]> = {
   grey: ['var(--surface-highest)', 'var(--on-surface-variant)', 'var(--outline)'],
   secondary: ['var(--secondary-container)', 'var(--on-secondary-container)', 'var(--secondary)'],
   blue: ['var(--primary-container)', 'var(--on-primary-container)', 'var(--primary)'],
-  green: ['#d6efcb', '#062100', '#386a20'],
+  green: ['var(--c-green-bg)', 'var(--c-green-fg)', 'var(--c-green-dot)'],
   purple: ['var(--tertiary-container)', 'var(--on-tertiary-container)', 'var(--tertiary)'],
   amber: ['var(--warning-container)', 'var(--on-warning-container)', 'var(--warning)'],
   red: ['var(--error-container)', 'var(--on-error-container)', 'var(--error)'],

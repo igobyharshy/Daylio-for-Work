@@ -8,6 +8,7 @@ import { DuePicker, EstimateDialog, TimeInput } from '../ui/pickers';
 import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot } from './tasks';
 import { statusTone, avgOverrunMin, tagChipTone } from '../lib/select';
 import { useMiniTimer } from './mini';
+import { useDragSort } from './dnd';
 import {
   atTime, cap, dueAt, dueLabel, elapsed, fmtClock, fmtDayComma, fmtDayShort, fmtMin, fmtTimer, hhmm, isDone, isOverEstimate, isOverdue,
   isoDate, relDay, remainingMs, startBy, todayISO, totalEstimateMin, uid,
@@ -69,16 +70,16 @@ export function TaskDrawer({ t }: { t: Task }) {
       <div className="sheet-body">
         {/* Title + steps in one card (To Do style) */}
         <div className="card title-card" style={{ background: amber ? 'var(--warning-container)' : 'var(--surface-lowest)' }}>
-          <div className="row gap-4" style={{ alignItems: 'flex-start', padding: '8px 8px 4px 4px' }}>
+          <div className="row gap-4 title-row">
             <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} data-tip={done ? 'Mark not done' : 'Mark done'} onClick={() => act.toggleDone(t)}>
               <Icon name={done ? 'checkCircle' : 'circle'} />
             </button>
             <textarea ref={titleRef} aria-label="Task title" className="inline-input t-tl" rows={1} value={title} onChange={e => setTitle(e.target.value)} onBlur={saveTitle}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
-              style={{ resize: 'none', paddingTop: 6, fontWeight: 500, textDecoration: done ? 'line-through' : undefined, color: done ? 'var(--on-surface-variant)' : undefined }} />
+              style={{ resize: 'none', paddingTop: 4, textDecoration: done ? 'line-through' : undefined, color: done ? 'var(--on-surface-variant)' : undefined }} />
           </div>
           <Steps t={t} />
-          {done && <div className="row gap-8" style={{ flexWrap: 'wrap', padding: '4px 16px 12px 48px' }}><OutcomeChips t={t} /></div>}
+          {done && <div className="row gap-8" style={{ flexWrap: 'wrap', padding: '2px 12px 10px 40px' }}><OutcomeChips t={t} /></div>}
         </div>
 
         {/* Timer */}
@@ -207,24 +208,37 @@ function Steps({ t }: { t: Task }) {
     st.addTask({ title: s.title, projectId: t.projectId, myDayDate: t.myDayDate, dueDate: t.dueDate });
     save(t.steps.filter(x => x.id !== s.id));
   };
+  // drag a step up or down (mouse anywhere on the row, touch from the grip)
+  const drag = useDragSort((id, _group, beforeId) => {
+    const moving = t.steps.find(x => x.id === id); if (!moving) return;
+    const rest = t.steps.filter(x => x.id !== id);
+    const i = beforeId ? rest.findIndex(x => x.id === beforeId) : rest.length;
+    rest.splice(i < 0 ? rest.length : i, 0, moving);
+    if (rest.some((x, k) => x.id !== t.steps[k].id)) save(rest);
+  });
   return (
     <div className="steps">
-      {t.steps.map(s => (
-        <div key={s.id} className={cx('step-row', s.done && 'done')}>
-          <button className={cx('check', s.done && 'on')} style={{ width: 32, height: 32 }} aria-label={s.done ? 'Mark step not done' : 'Mark step done'}
-            onClick={() => save(t.steps.map(x => x.id === s.id ? { ...x, done: !x.done } : x))}>
-            <Icon name={s.done ? 'checkCircle' : 'circle'} size={20} />
-          </button>
-          {editing === s.id
-            ? <input className="inline-input t-bm grow" autoFocus defaultValue={s.title} aria-label="Step"
-                onBlur={e => { const v = e.target.value.trim(); save(v ? t.steps.map(x => x.id === s.id ? { ...x, title: v } : x) : t.steps.filter(x => x.id !== s.id)); setEditing(null); }}
-                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(null); }} />
-            : <button className="t-bm grow step-text" onClick={() => setEditing(s.id)}>{s.title}</button>}
-          <IBtn sm icon="moreV" label="Step options" className="step-more" onClick={e => setMenu({ id: s.id, el: e.currentTarget as HTMLElement })} />
-        </div>
-      ))}
-      <div className="row gap-8 step-add">
-        <Icon name="add" style={{ color: 'var(--primary)', width: 20 }} />
+      <div className="steps-list" data-drop-group={'steps-' + t.id}>
+        {t.steps.map(s => (
+          <div key={s.id} className={cx('step-row', s.done && 'done')} {...drag(s.id)}>
+            <span className="step-grip" data-drag-handle aria-hidden><Icon name="drag" size={16} /></span>
+            <button className={cx('check sm', s.done && 'on')} aria-label={s.done ? 'Mark step not done' : 'Mark step done'}
+              onClick={() => save(t.steps.map(x => x.id === s.id ? { ...x, done: !x.done } : x))}>
+              <Icon name={s.done ? 'checkCircle' : 'circle'} />
+            </button>
+            <div className="step-body">
+              {editing === s.id
+                ? <input className="inline-input t-bm grow step-text" autoFocus defaultValue={s.title} aria-label="Step"
+                    onBlur={e => { const v = e.target.value.trim(); save(v ? t.steps.map(x => x.id === s.id ? { ...x, title: v } : x) : t.steps.filter(x => x.id !== s.id)); setEditing(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(null); }} />
+                : <button className="t-bm grow step-text" data-drag-handle onClick={() => setEditing(s.id)}>{s.title}</button>}
+              <IBtn sm icon="moreV" label="Step options" className={cx('step-more', menu?.id === s.id && 'selected')} onClick={e => setMenu({ id: s.id, el: e.currentTarget as HTMLElement })} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="step-add">
+        <Icon name="add" />
         <input className="inline-input t-bm" placeholder={t.steps.length ? 'Next step' : 'Add a step'} value={text} onChange={e => setText(e.target.value)} aria-label="Add a step"
           onKeyDown={e => { if (e.key === 'Enter') add(); }} onBlur={add} />
       </div>
@@ -233,6 +247,7 @@ function Steps({ t }: { t: Task }) {
           <MenuList width={220} onClose={() => setMenu(null)} items={[
             { t: 'Rename', ic: 'edit', onClick: () => setEditing(s.id) },
             { t: s.done ? 'Mark not done' : 'Mark done', ic: 'checkCircleO', onClick: () => save(t.steps.map(x => x.id === s.id ? { ...x, done: !x.done } : x)) },
+            { t: 'Move to top', ic: 'chevUp', disabled: t.steps[0]?.id === s.id, onClick: () => save([s, ...t.steps.filter(x => x.id !== s.id)]) },
             { t: 'Make it a task', ic: 'add', onClick: () => promote(s) },
             { divider: true },
             { t: 'Delete step', ic: 'trash', danger: true, onClick: () => save(t.steps.filter(x => x.id !== s.id)) },
