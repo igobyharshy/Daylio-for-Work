@@ -162,6 +162,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   if (!showProject && showSun && inMyDay && !done) meta.push(<span className="m primary"><Icon name="sunFill" />My Day</span>);
   if (carry && !done && t.myDayDate && t.myDayDate < todayISO()) meta.push(<span className="m">From {relDay(t.myDayDate)}</span>);
   if (!done && t.dueDate) meta.push(<DueText t={t} settings={st.settings} now={now} />);
+  if (!done && t.plannedStart) meta.push(<span className="m" data-tip="Planned on the Timeline"><Icon name="schedule" />{relDay(isoDate(new Date(t.plannedStart))) === 'today' ? '' : cap(relDay(isoDate(new Date(t.plannedStart)))) + ' '}{fmtClock(t.plannedStart)}</span>);
   if (t.steps.length) meta.push(<span className="m"><Icon name="checklist" />{stepsDone}/{t.steps.length}</span>);
   if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m" data-tip={`Reminder ${relDay(isoDate(new Date(t.remindAt)))} ${fmtClock(t.remindAt)}`}><Icon name="bell" /></span>);
 

@@ -4,14 +4,15 @@ import { useUI } from '../app/ui';
 import type { Step, Task } from '../lib/types';
 import { Icon, type IconName } from '../ui/Icon';
 import { Btn, IBtn, MenuList, Pill, Popover, Switch, Tag, cx, useAnchor } from '../ui/kit';
-import { DuePicker, EstimateDialog, TimeInput } from '../ui/pickers';
+import { DayTimeInput, DuePicker, EstimateDialog } from '../ui/pickers';
+import { useToast } from '../ui/Toast';
 import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot } from './tasks';
 import { statusTone, avgOverrunMin, tagChipTone } from '../lib/select';
 import { useMiniTimer } from './mini';
 import { useDragSort } from './dnd';
 import {
   atTime, cap, dueAt, dueLabel, elapsed, fmtClock, fmtDayComma, fmtDayShort, fmtMin, fmtTimer, hhmm, isDone, isOverEstimate, isOverdue,
-  isoDate, relDay, remainingMs, startBy, todayISO, totalEstimateMin, uid,
+  isoDate, plannedRange, relDay, remainingMs, startBy, todayISO, totalEstimateMin, uid, workSessions,
 } from '../lib/time';
 
 function Prop({ icon, k, children }: { icon: IconName; k: string; children: React.ReactNode }) {
@@ -33,7 +34,9 @@ export function TaskDrawer({ t }: { t: Task }) {
   const [title, setTitle] = useState(t.title);
   const [note, setNote] = useState(t.note);
   const [editFinish, setEditFinish] = useState(false);
-  useEffect(() => { setTitle(t.title); setNote(t.note); setEditFinish(false); }, [t.id]);
+  const [editStart, setEditStart] = useState(false);
+  const pla = useAnchor();
+  useEffect(() => { setTitle(t.title); setNote(t.note); setEditFinish(false); setEditStart(false); }, [t.id]);
   useEffect(() => { if (document.activeElement?.getAttribute('aria-label') !== 'Task title') setTitle(t.title); }, [t.title]);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -69,9 +72,9 @@ export function TaskDrawer({ t }: { t: Task }) {
       </div>
       <div className="sheet-body">
         {/* Title + steps in one card (To Do style) */}
-        <div className="card title-card" style={{ background: amber ? 'var(--warning-container)' : 'var(--surface-lowest)' }}>
+        <div className="card title-card" style={{ background: 'var(--surface-lowest)' }}>
           <div className="row gap-4 title-row">
-            <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} data-tip={done ? 'Mark not done' : 'Mark done'} onClick={() => act.toggleDone(t)}>
+            <button className={cx('check', done && 'on')} aria-label={done ? 'Mark not done' : 'Mark done'} data-tip={done ? 'Mark not done' : 'Mark done'} onClick={() => act.toggleDone(t)}>
               <Icon name={done ? 'checkCircle' : 'circle'} />
             </button>
             <textarea ref={titleRef} aria-label="Task title" className="inline-input t-tl" rows={1} value={title} onChange={e => setTitle(e.target.value)} onBlur={saveTitle}
@@ -129,6 +132,13 @@ export function TaskDrawer({ t }: { t: Task }) {
               {sb && !done && sb.getTime() > now && <span className="t-bs c-muted" style={{ padding: '0 10px 6px' }}>Start by {relDay(isoDate(sb)) === 'today' ? '' : cap(relDay(isoDate(sb))) + ' '}{fmtClock(sb)}{!t.dueTime ? ' · based on the end of your work day' : ''}</span>}
             </div>
           </Prop>
+          {(!done || t.plannedStart) && (
+            <Prop icon="schedule" k="Planned">
+              <button className={cx('val-btn state', !t.plannedStart && 'placeholder')} onClick={e => pla.open(e)} data-tip="When you plan to work on it. Shows on the Timeline.">
+                {(() => { const r = plannedRange(t); return r ? `${cap(relDay(isoDate(r[0])))} ${fmtClock(r[0])} – ${fmtClock(r[1])}` : 'Plan a time'; })()}<Icon name="edit" className="hover-only" />
+              </button>
+            </Prop>
+          )}
           <Prop icon="bell" k="Remind me">
             <button className={cx('val-btn state', !t.remindAt && 'placeholder')} onClick={e => ra.open(e)}>
               {t.remindAt ? `${cap(relDay(isoDate(new Date(t.remindAt))))} ${fmtClock(t.remindAt)}` : 'Add reminder'}<Icon name="edit" className="hover-only" />
@@ -142,7 +152,13 @@ export function TaskDrawer({ t }: { t: Task }) {
               </span>
             </Prop>
           )}
-          {t.firstStartedAt && <Prop icon="play" k="Started"><span className="val-btn">{fmtDayShort(t.firstStartedAt)} · {fmtClock(t.firstStartedAt)}</span></Prop>}
+          {t.firstStartedAt && (
+            <Prop icon="play" k="Started">
+              {editStart
+                ? <StartEdit t={t} onClose={() => setEditStart(false)} />
+                : <button className="val-btn state" onClick={() => setEditStart(true)} data-tip="Edit start time">{fmtDayShort(t.firstStartedAt)} · {fmtClock(t.firstStartedAt)}<Icon name="edit" className="hover-only" /></button>}
+            </Prop>
+          )}
           {done && (
             <Prop icon="checkCircleO" k="Finished">
               {editFinish
@@ -185,6 +201,12 @@ export function TaskDrawer({ t }: { t: Task }) {
         </Popover>
       )}
       {da.isOpen && <Popover anchor={da.el} onClose={da.close} placement="left"><DuePicker date={t.dueDate} time={t.dueTime} onDone={(d, tm) => { setDue(d, tm); da.close(); }} onClear={() => { setDue(null, null); da.close(); }} /></Popover>}
+      {pla.isOpen && (
+        <Popover anchor={pla.el} onClose={pla.close} placement="left">
+          <DuePicker title="Plan a time" requireTime date={t.plannedStart ? isoDate(new Date(t.plannedStart)) : todayISO()} time={t.plannedStart ? hhmm(new Date(t.plannedStart)) : nextSlot()}
+            onDone={(d, tm) => { st.planTask(t.id, atTime(d, tm ?? '09:00')); pla.close(); }} onClear={() => { st.planTask(t.id, null); pla.close(); }} />
+        </Popover>
+      )}
       {ra.isOpen && <RemindPicker anchor={ra.el} onClose={ra.close} t={t} value={t.remindAt} onPick={iso => st.updateTask(t.id, { remindAt: iso, remindedAt: null })} />}
       {estOpen && <EstimateDialog editing={!!t.firstStartedAt && !!t.estimateMin} initial={t.estimateMin ? totalEstimateMin(t) : null} dueAt={dueAt(t, st.settings)} avgOverrunMin={avgOverrunMin(st.tasks)} onClose={() => setEstOpen(false)}
         onSet={min => {
@@ -258,21 +280,51 @@ function Steps({ t }: { t: Task }) {
   );
 }
 
-/** E18 — inline edit of the finish time */
+/** next quarter hour from now, "HH:MM" */
+function nextSlot() {
+  const d = new Date(Math.ceil(Date.now() / (15 * 60000)) * 15 * 60000);
+  return hhmm(d);
+}
+
+/** E18 — inline edit of the finish time (day + time, e.g. a timer left running overnight) */
 function FinishEdit({ t, onClose }: { t: Task; onClose: () => void }) {
   const st = useStore();
   const f = new Date(t.finishedAt!);
-  const [v, setV] = useState(hhmm(f));
-  const day = isoDate(f);
-  const preview = atTime(day, v);
-  const started = t.firstStartedAt ? new Date(t.firstStartedAt) : null;
-  const invalid = (started && preview < started) || preview.getTime() > Date.now() + 60000;
-  const took = Math.max(0, t.elapsedMs + (preview.getTime() - f.getTime()));
+  const [v, setV] = useState(f);
+  const list = workSessions(t);
+  const lastStart = list.length ? new Date(list[list.length - 1].s) : t.firstStartedAt ? new Date(t.firstStartedAt) : null;
+  const invalid = (lastStart && v < lastStart) || v.getTime() > Date.now() + 60000;
+  const took = Math.max(0, t.elapsedMs + (v.getTime() - f.getTime()));
   return (
     <div className="col gap-8" style={{ padding: '8px 0' }}>
-      <div className="row gap-8"><TimeInput value={v} onChange={setV} label="Finish time" /><span className="t-bs c-muted">{day === todayISO() ? 'Today' : fmtDayShort(day)}</span></div>
+      <DayTimeInput value={v} onChange={setV} label="Finish time" minDate={lastStart ? isoDate(lastStart) : undefined} maxDate={todayISO()} />
       <span className={cx('t-bs', invalid ? 'c-error' : 'c-muted')}>{invalid ? 'Finish time must be after the start and not in the future.' : `Took ${fmtMin(took / 60000)}${t.estimateMin ? ` · estimate ${fmtMin(t.estimateMin)}` : ''}`}</span>
-      <div className="row gap-8"><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!!invalid} onClick={() => { st.setFinishTime(t.id, preview); onClose(); }}>Save</Btn></div>
+      <div className="row gap-8"><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!!invalid} onClick={() => { st.setFinishTime(t.id, v); onClose(); }}>Save</Btn></div>
+    </div>
+  );
+}
+
+/** Edit when the task was started; "Reset timer" undoes an accidental start */
+function StartEdit({ t, onClose }: { t: Task; onClose: () => void }) {
+  const st = useStore();
+  const toast = useToast();
+  const f = new Date(t.firstStartedAt!);
+  const [v, setV] = useState(f);
+  const first = workSessions(t)[0];
+  const limit = first?.e ? new Date(first.e) : new Date();
+  const invalid = v > limit || v.getTime() > Date.now() + 60000;
+  const took = Math.max(0, elapsed(t) + (f.getTime() - v.getTime()));
+  const reset = () => {
+    const undo = st.resetTimer(t.id);
+    onClose();
+    toast.show('Timer reset. The task is back to not started.', { icon: 'refresh', action: { label: 'Undo', onClick: undo } });
+  };
+  return (
+    <div className="col gap-8" style={{ padding: '8px 0' }}>
+      <DayTimeInput value={v} onChange={setV} label="Start time" maxDate={todayISO()} />
+      <span className={cx('t-bs', invalid ? 'c-error' : 'c-muted')}>{invalid ? (first?.e ? 'Start must be before the end of the first session.' : 'Start can’t be in the future.') : `Time recorded ${fmtMin(took / 60000)}${t.estimateMin ? ` · estimate ${fmtMin(t.estimateMin)}` : ''}`}</span>
+      <div className="row gap-8"><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!!invalid} onClick={() => { st.setStartTime(t.id, v); onClose(); }}>Save</Btn></div>
+      <div className="row gap-4 t-bs c-muted" style={{ flexWrap: 'wrap' }}>Started by accident?<Btn kind="text" icon="refresh" onClick={reset}>Reset timer</Btn></div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Project, Task, Entry, Notif } from './types';
+import type { Project, Task, Entry, Notif, TimeBlock } from './types';
 import type { Checkin } from './trackers';
 
 // snake_case rows <-> camelCase app objects
@@ -24,14 +24,15 @@ export const taskFromRow = (r: Row): Task => ({
   dueDate: r.due_date, dueTime: trimTime(r.due_time), estimateMin: r.estimate_min,
   reEstimates: r.re_estimates ?? [], myDayDate: r.my_day_date, remindAt: r.remind_at, remindedAt: r.reminded_at,
   steps: r.steps ?? [], note: r.note ?? '', elapsedMs: Number(r.elapsed_ms ?? 0), runStartedAt: r.run_started_at, pausedAt: r.paused_at ?? null,
-  firstStartedAt: r.first_started_at, finishedAt: r.finished_at, reflection: r.reflection, snoozeUntil: r.snooze_until,
+  firstStartedAt: r.first_started_at, finishedAt: r.finished_at, plannedStart: r.planned_start ?? null, sessions: Array.isArray(r.sessions) ? r.sessions : [],
+  reflection: r.reflection, snoozeUntil: r.snooze_until,
   sort: r.sort, isSample: r.is_sample, createdAt: r.created_at,
 });
 export const taskToRow = (t: Partial<Task>): Row => strip({
   id: t.id, project_id: t.projectId, title: t.title, status: t.status, due_date: t.dueDate, due_time: t.dueTime,
   estimate_min: t.estimateMin, re_estimates: t.reEstimates, my_day_date: t.myDayDate, remind_at: t.remindAt,
   reminded_at: t.remindedAt, steps: t.steps, note: t.note, elapsed_ms: t.elapsedMs, run_started_at: t.runStartedAt, paused_at: t.pausedAt,
-  first_started_at: t.firstStartedAt, finished_at: t.finishedAt, reflection: t.reflection, snooze_until: t.snoozeUntil,
+  first_started_at: t.firstStartedAt, finished_at: t.finishedAt, planned_start: t.plannedStart, sessions: t.sessions, reflection: t.reflection, snooze_until: t.snoozeUntil,
   sort: t.sort, is_sample: t.isSample, created_at: t.createdAt,
 });
 
@@ -47,6 +48,13 @@ export const notifFromRow = (r: Row): Notif => ({
 });
 export const notifToRow = (n: Partial<Notif>): Row => strip({
   id: n.id, kind: n.kind, title: n.title, body: n.body, task_id: n.taskId, read_at: n.readAt, created_at: n.createdAt,
+});
+
+export const blockFromRow = (r: Row): TimeBlock => ({
+  id: r.id, title: r.title ?? '', kind: r.kind ?? 'other', startAt: r.start_at, endAt: r.end_at, note: r.note ?? '', createdAt: r.created_at,
+});
+export const blockToRow = (b: Partial<TimeBlock>): Row => strip({
+  id: b.id, title: b.title, kind: b.kind, start_at: b.startAt, end_at: b.endAt, note: b.note, created_at: b.createdAt,
 });
 
 export const checkinFromRow = (r: Row): Checkin => ({ id: r.id, day: r.day, values: r.values ?? {}, skipped: r.skipped, isSample: r.is_sample });

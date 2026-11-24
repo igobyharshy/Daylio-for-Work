@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Icon } from './Icon';
-import { Btn, Chip, Dialog, IBtn, Switch, cx } from './kit';
-import { MONTHS, addDays, atTime, fmtClock, fmtHHMM, fmtMin, hhmm, isoDate, parseDate, todayISO } from '../lib/time';
+import { Btn, Chip, Dialog, IBtn, Popover, Switch, cx, useAnchor } from './kit';
+import { MONTHS, addDays, atTime, fmtClock, fmtDayShort, fmtHHMM, fmtMin, hhmm, isoDate, parseDate, todayISO } from '../lib/time';
 
 // ---------- Calendar ----------
 export function Calendar({ value, onPick, range, maxDate, minDate, month: initMonth }: {
@@ -60,6 +60,29 @@ export function TimeInput({ value, onChange, label = 'Time' }: { value: string; 
   );
 }
 
+/** A date button (opens the calendar) + a time field, side by side. Used to edit Started / Finished. */
+export function DayTimeInput({ value, onChange, minDate, maxDate, label = 'Time' }: {
+  value: Date; onChange: (d: Date) => void; minDate?: string; maxDate?: string; label?: string;
+}) {
+  const a = useAnchor();
+  const day = isoDate(value), tm = hhmm(value);
+  return (
+    <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+      <button type="button" className="select-btn outlined state day-btn" onClick={e => a.open(e)} aria-label="Pick a day">
+        <Icon name="event" size={18} />{day === todayISO() ? 'Today' : day === isoDate(addDays(new Date(), -1)) ? 'Yesterday' : fmtDayShort(day)}
+      </button>
+      <TimeInput value={tm} onChange={v => onChange(atTime(day, v))} label={label} />
+      {a.isOpen && (
+        <Popover anchor={a.el} onClose={a.close}>
+          <div className="menu picker" style={{ padding: '8px 16px 12px' }}>
+            <Calendar value={day} minDate={minDate} maxDate={maxDate} onPick={d => { onChange(atTime(d, tm)); a.close(); }} />
+          </div>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
 // ---------- Due date picker (E06 / E21) ----------
 export function DuePicker({ date, time, onDone, onClear, title = 'Due date', requireTime, clearLabel = 'Clear' }: {
   date: string | null; time: string | null; onDone: (date: string, time: string | null) => void; onClear: () => void; title?: string; requireTime?: boolean; clearLabel?: string;
@@ -71,7 +94,7 @@ export function DuePicker({ date, time, onDone, onClear, title = 'Due date', req
   // past days can't be picked (the current value stays selectable)
   const min = date && date < today ? date : today;
   return (
-    <div className="menu" style={{ width: 340, padding: '12px 16px 16px', gap: 8 }}>
+    <div className="menu picker" style={{ padding: '12px 16px 16px', gap: 8 }}>
       <div className="t-lm c-muted" style={{ padding: '0 8px' }}>{title}</div>
       <Calendar value={d} onPick={setD} minDate={min} />
       <div className="row gap-8"><Chip sel={d === today} onClick={() => setD(today)}>Today</Chip><Chip sel={d === tomorrow} onClick={() => setD(tomorrow)}>Tomorrow</Chip></div>
@@ -92,7 +115,7 @@ export function DateTimePicker({ value, onDone, onClear }: { value: string; onDo
   const [t, setT] = useState(hhmm(v));
   const today = todayISO(), yesterday = isoDate(addDays(new Date(), -1));
   return (
-    <div className="menu" style={{ width: 340, padding: '12px 16px 16px', gap: 8 }}>
+    <div className="menu picker" style={{ padding: '12px 16px 16px', gap: 8 }}>
       <div className="row gap-8"><Chip sel={d === today} onClick={() => setD(today)}>Today</Chip><Chip sel={d === yesterday} onClick={() => setD(yesterday)}>Yesterday</Chip></div>
       <Calendar value={d} onPick={setD} maxDate={today} />
       <div className="row" style={{ justifyContent: 'space-between', minHeight: 48 }}><span className="t-ts c-muted">Time</span><TimeInput value={t} onChange={setT} /></div>

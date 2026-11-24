@@ -24,7 +24,7 @@ export function buildSample(inboxId: string, now = new Date()) {
   const T = (t: Partial<Task>): Task => ({
     id: uid(), projectId: inboxId, title: '', status: 'Not started', dueDate: null, dueTime: null, estimateMin: null,
     reEstimates: [], myDayDate: null, remindAt: null, remindedAt: null, steps: [], note: '', elapsedMs: 0,
-    runStartedAt: null, pausedAt: null, firstStartedAt: null, finishedAt: null, reflection: 'none', snoozeUntil: null,
+    runStartedAt: null, pausedAt: null, firstStartedAt: null, finishedAt: null, plannedStart: null, sessions: [], reflection: 'none', snoozeUntil: null,
     sort: ++sort, isSample: true, createdAt: created, ...t,
   });
   const step = (title: string, done = false) => ({ id: uid(), title, done });

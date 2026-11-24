@@ -1,4 +1,4 @@
-import type { Task, Settings } from './types';
+import type { Task, Settings, WorkSession } from './types';
 
 export const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -82,6 +82,27 @@ export function elapsed(t: Task, now = Date.now()): number {
   return t.elapsedMs + (t.runStartedAt ? Math.max(0, now - new Date(t.runStartedAt).getTime()) : 0);
 }
 export const isRunning = (t: Task) => !!t.runStartedAt;
+
+/**
+ * The stretches of real work on a task. Tasks timed since the Timeline release log every session.
+ * Older tasks only know first start → finish (or → last pause / now), so they show as one stretch.
+ */
+export function workSessions(t: Task): WorkSession[] {
+  if (t.sessions?.length) return t.sessions;
+  if (!t.firstStartedAt) return [];
+  if (t.finishedAt) return [{ s: t.firstStartedAt, e: t.finishedAt }];
+  if (t.runStartedAt) return [{ s: t.firstStartedAt, e: null }];
+  const end = t.pausedAt ?? new Date(new Date(t.firstStartedAt).getTime() + t.elapsedMs).toISOString();
+  return [{ s: t.firstStartedAt, e: end < t.firstStartedAt ? t.firstStartedAt : end }];
+}
+/** planned slot: start → start + estimate (30 min when there's no estimate yet) */
+export const PLAN_DEFAULT_MIN = 30;
+export function plannedRange(t: Task): [Date, Date] | null {
+  if (!t.plannedStart) return null;
+  const s = new Date(t.plannedStart);
+  const len = totalEstimateMin(t) || PLAN_DEFAULT_MIN;
+  return [s, new Date(s.getTime() + len * 60000)];
+}
 export const isDone = (t: Task) => !!t.finishedAt;
 export function remainingMs(t: Task, now = Date.now()) {
   return totalEstimateMin(t) * 60000 - elapsed(t, now);

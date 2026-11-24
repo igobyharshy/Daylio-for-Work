@@ -23,6 +23,8 @@ export interface Project {
 }
 
 export interface Step { id: string; title: string; done: boolean }
+/** one stretch of timer work: start, end (null while it runs) */
+export interface WorkSession { s: string; e: string | null }
 export interface ReEstimate { at: string; addMin: number }
 
 export type Reflection = 'none' | 'needed' | 'done' | 'dismissed';
@@ -47,6 +49,10 @@ export interface Task {
   pausedAt: string | null;
   firstStartedAt: string | null;
   finishedAt: string | null;
+  /** when you plan to work on it (Timeline); the planned length is the estimate. Separate from the due date. */
+  plannedStart: string | null;
+  /** timer sessions, logged from the Timeline release on; older tasks have [] */
+  sessions: WorkSession[];
   reflection: Reflection;
   snoozeUntil: string | null;
   sort: number;
@@ -62,6 +68,18 @@ export interface Entry {
   taskIds: ID[];
   trackerValues: TrackerValues;
   isSample: boolean;
+  createdAt: string;
+}
+
+export type BlockKind = 'meeting' | 'lunch' | 'break' | 'other';
+/** non-task time on the Timeline: meetings, lunch, breaks */
+export interface TimeBlock {
+  id: ID;
+  title: string;
+  kind: BlockKind;
+  startAt: string;
+  endAt: string;
+  note: string;
   createdAt: string;
 }
 
@@ -108,7 +126,9 @@ export interface Settings {
   projectTags: string[];
   journalTags: string[];
   notif: NotifPrefs;
-  myDayView: 'list' | 'board';
+  myDayView: 'list' | 'board' | 'timeline';
+  /** Timeline: show the plan, what actually happened, or both */
+  timelineMode?: 'plan' | 'actual' | 'both';
   projectsView: 'list' | 'gallery' | 'board';
   journalView: 'calendar' | 'list';
   lastReflectionPrompt?: string; // YYYY-MM-DD

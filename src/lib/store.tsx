@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import type { Entry, Notif, Project, Settings, Task, ID } from './types';
+import type { Entry, Notif, Project, Settings, Task, ID, TimeBlock, WorkSession } from './types';
 import { DEFAULT_SETTINGS } from './types';
-import { checkinFromRow, checkinToRow, entryFromRow, entryToRow, notifFromRow, notifToRow, projectFromRow, projectToRow, taskFromRow, taskToRow } from './db';
+import { blockFromRow, blockToRow, checkinFromRow, checkinToRow, entryFromRow, entryToRow, notifFromRow, notifToRow, projectFromRow, projectToRow, taskFromRow, taskToRow } from './db';
 import type { Checkin, TrackerValues } from './trackers';
 import { buildSample } from './seed';
-import { elapsed, outcome, todayISO, uid, type Outcome } from './time';
+import { elapsed, isoDate, outcome, todayISO, uid, workSessions, type Outcome } from './time';
 import { useToast } from '../ui/Toast';
 
 export interface StoreState {
@@ -16,6 +16,7 @@ export interface StoreState {
   entries: Entry[];
   notifs: Notif[];
   checkins: Checkin[];
+  blocks: TimeBlock[];
   settings: Settings;
   displayName: string;
   email: string;
@@ -41,6 +42,17 @@ export interface Store extends StoreState {
   removeProject: (id: ID, mode: 'move' | 'delete') => () => void;
   reEstimate: (id: ID, addMin: number) => void;
   setFinishTime: (id: ID, at: Date) => void;
+  /** move when the task was first started (accidental or late start) */
+  setStartTime: (id: ID, at: Date) => void;
+  /** change one work session (Timeline · Actual); keeps the recorded time in step */
+  editSession: (id: ID, index: number, start: Date, end: Date | null) => void;
+  /** wipe the timer (started by accident); returns undo */
+  resetTimer: (id: ID) => () => void;
+  /** plan when to work on a task (null clears it). Planning for today also puts it in My Day. */
+  planTask: (id: ID, at: Date | null) => void;
+  addBlock: (b: Partial<TimeBlock>) => TimeBlock;
+  updateBlock: (id: ID, patch: Partial<TimeBlock>) => void;
+  removeBlock: (id: ID) => () => void;
   addProject: (p: Partial<Project>) => Project;
   updateProject: (id: ID, patch: Partial<Project>) => void;
   deleteProject: (id: ID) => void;
@@ -65,13 +77,13 @@ export const useStore = () => {
   return s;
 };
 
-type Table = 'projects' | 'tasks' | 'journal_entries' | 'notifications' | 'daily_checkins';
+type Table = 'projects' | 'tasks' | 'journal_entries' | 'notifications' | 'daily_checkins' | 'time_blocks';
 
 export function StoreProvider({ session, children }: { session: Session; children: ReactNode }) {
   const toast = useToast();
   const userId = session.user.id;
   const [state, setState] = useState<StoreState>({
-    loaded: false, projects: [], tasks: [], entries: [], notifs: [], checkins: [], settings: DEFAULT_SETTINGS,
+    loaded: false, projects: [], tasks: [], entries: [], notifs: [], checkins: [], blocks: [], settings: DEFAULT_SETTINGS,
     displayName: '', email: session.user.email ?? '', userId,
   });
   const stateRef = useRef(state);
@@ -88,14 +100,18 @@ export function StoreProvider({ session, children }: { session: Session; childre
 
   // ---------- load ----------
   const load = useCallback(async (initial: boolean) => {
-    const [pr, tr, er, nr, sr, cr] = await Promise.all([
+    const [pr, tr, er, nr, sr, cr, br] = await Promise.all([
       supabase.from('projects').select('*').order('sort'),
       supabase.from('tasks').select('*').order('sort'),
       supabase.from('journal_entries').select('*').order('when_at', { ascending: false }),
       supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(100),
       supabase.from('user_settings').select('*').maybeSingle(),
       supabase.from('daily_checkins').select('*').order('day', { ascending: false }).limit(400),
+      supabase.from('time_blocks').select('*').order('start_at'),
     ]);
+    // meetings & breaks are optional: if that table can't be read, the rest of the app still loads
+    if (br.error) console.warn('time_blocks not available', br.error);
+    const blocks = (br.data ?? []).map(blockFromRow);
     const err = pr.error || tr.error || er.error || nr.error || sr.error || cr.error;
     if (err) { fail(err); return; }
     let projects = (pr.data ?? []).map(projectFromRow);
@@ -140,7 +156,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
     if (jd.manual === 'Mistake') jd.manual = '';
     if (jd.fromTask === 'Task delay') jd.fromTask = '';
     setState(s => ({
-      ...s, loaded: true, projects, tasks, entries, notifs, checkins,
+      ...s, loaded: true, projects, tasks, entries, notifs, checkins, blocks,
       settings: {
         ...DEFAULT_SETTINGS, ...sd, notif: { ...DEFAULT_SETTINGS.notif, ...(sd.notif ?? {}) }, journalDefaults: jd,
         // "Archived" is a flag for projects now, not a status
@@ -164,7 +180,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
   // realtime: merge changes from other devices
   useEffect(() => {
     const map: Record<Table, [keyof StoreState, (r: any) => any]> = {
-      projects: ['projects', projectFromRow], tasks: ['tasks', taskFromRow], journal_entries: ['entries', entryFromRow], notifications: ['notifs', notifFromRow], daily_checkins: ['checkins', checkinFromRow],
+      projects: ['projects', projectFromRow], tasks: ['tasks', taskFromRow], journal_entries: ['entries', entryFromRow], notifications: ['notifs', notifFromRow], daily_checkins: ['checkins', checkinFromRow], time_blocks: ['blocks', blockFromRow],
     };
     const ch = supabase.channel('sync-' + userId);
     (Object.keys(map) as Table[]).forEach(table => {
@@ -188,7 +204,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
   }, [userId]);
 
   // ---------- local mutation helpers ----------
-  const patchList = <K extends 'projects' | 'tasks' | 'entries' | 'notifs' | 'checkins'>(key: K, id: ID, patch: any) =>
+  const patchList = <K extends 'projects' | 'tasks' | 'entries' | 'notifs' | 'checkins' | 'blocks'>(key: K, id: ID, patch: any) =>
     setState(s => ({ ...s, [key]: (s[key] as any[]).map(x => (x.id === id ? { ...x, ...patch } : x)) }));
 
   // ---------- tasks ----------
@@ -204,7 +220,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
     const task: Task = {
       id: uid(), projectId: inbox?.id ?? null, title: '', status: s.settings.taskStatuses.find(x => x.note?.startsWith('Default'))?.name ?? 'Not started',
       dueDate: null, dueTime: null, estimateMin: null, reEstimates: [], myDayDate: null, remindAt: null, remindedAt: null,
-      steps: [], note: '', elapsedMs: 0, runStartedAt: null, pausedAt: null, firstStartedAt: null, finishedAt: null, reflection: 'none',
+      steps: [], note: '', elapsedMs: 0, runStartedAt: null, pausedAt: null, firstStartedAt: null, finishedAt: null, plannedStart: null, sessions: [], reflection: 'none',
       snoozeUntil: null, sort: maxSort + 1, isSample: false, createdAt: new Date().toISOString(), ...t,
     };
     setState(st => ({ ...st, tasks: [...st.tasks, task] }));
@@ -222,7 +238,8 @@ export function StoreProvider({ session, children }: { session: Session; childre
   const pauseTask = useCallback((id: ID) => {
     const t = stateRef.current.tasks.find(x => x.id === id);
     if (!t || !t.runStartedAt) return;
-    updateTask(id, { elapsedMs: elapsed(t), runStartedAt: null, pausedAt: new Date().toISOString() });
+    const now = new Date().toISOString();
+    updateTask(id, { elapsedMs: elapsed(t), runStartedAt: null, pausedAt: now, sessions: closeOpen(workSessions(t), now) });
   }, [updateTask]);
 
   const startTask = useCallback((id: ID) => {
@@ -232,7 +249,10 @@ export function StoreProvider({ session, children }: { session: Session; childre
     if (!t) return;
     const now = new Date().toISOString();
     const today = todayISO();
+    // log a new work session; a task timed before sessions existed keeps its old stretch first
+    const prev = closeOpen(workSessions({ ...t, runStartedAt: null }), now);
     updateTask(id, {
+      sessions: [...prev, { s: now, e: null }],
       runStartedAt: now, firstStartedAt: t.firstStartedAt ?? now, status: 'In progress', pausedAt: null,
       finishedAt: null, myDayDate: t.myDayDate && t.myDayDate <= today ? t.myDayDate : today,
     });
@@ -249,7 +269,8 @@ export function StoreProvider({ session, children }: { session: Session; childre
     const done: Task = { ...t, elapsedMs: ms, runStartedAt: null, finishedAt: finishedAt.toISOString(), status: 'Done' };
     const o = outcome(done, s.settings);
     const needs = t.reflection === 'none' && ((o.diffMin ?? 0) > 0 || (o.lateMin ?? 0) > 0);
-    updateTask(id, { elapsedMs: ms, runStartedAt: null, pausedAt: null, finishedAt: done.finishedAt, status: 'Done', reflection: needs ? 'needed' : t.reflection });
+    updateTask(id, { elapsedMs: ms, runStartedAt: null, pausedAt: null, finishedAt: done.finishedAt, status: 'Done', reflection: needs ? 'needed' : t.reflection,
+      ...(t.sessions.length ? { sessions: closeOpen(t.sessions, done.finishedAt!) } : {}) });
     return o;
   }, [updateTask]);
 
@@ -287,6 +308,13 @@ export function StoreProvider({ session, children }: { session: Session; childre
     const cancel = later('e' + id, () => write(supabase.from('journal_entries').delete().eq('id', id)));
     return () => { cancel(); setState(s => ({ ...s, entries: s.entries.some(x => x.id === id) ? s.entries : [e, ...s.entries] })); };
   }, [later, write]);
+  const removeBlock = useCallback((id: ID) => {
+    const b = stateRef.current.blocks.find(x => x.id === id);
+    if (!b) return () => {};
+    setState(s => ({ ...s, blocks: s.blocks.filter(x => x.id !== id) }));
+    const cancel = later('b' + id, () => write(supabase.from('time_blocks').delete().eq('id', id)));
+    return () => { cancel(); setState(s => ({ ...s, blocks: s.blocks.some(x => x.id === id) ? s.blocks : [...s.blocks, b] })); };
+  }, [later, write]);
   // flush pending deletes if the tab closes during the undo window
   useEffect(() => {
     const flush = () => { pending.current.forEach(id => window.clearTimeout(id)); };
@@ -300,12 +328,84 @@ export function StoreProvider({ session, children }: { session: Session; childre
     updateTask(id, { reEstimates: [...t.reEstimates, { at: new Date().toISOString(), addMin }] });
   }, [updateTask]);
 
+  /**
+   * Edit one work session. The recorded time (elapsedMs) moves by the same amount, so a task that was
+   * paused keeps its pauses. A running session can only move its start.
+   */
+  const editSession = useCallback((id: ID, index: number, start: Date, end: Date | null) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t) return;
+    const list = workSessions(t).map(x => ({ ...x }));
+    const old = list[index];
+    if (!old) return;
+    const s = start.toISOString();
+    const patch: Partial<Task> = {};
+    let ms = t.elapsedMs;
+    let e: string | null = end ? end.toISOString() : null;
+    if (old.e) {
+      if (!e) e = old.e;
+      ms += (new Date(e).getTime() - start.getTime()) - (new Date(old.e).getTime() - new Date(old.s).getTime());
+    } else {
+      e = null;
+      if (t.runStartedAt && t.runStartedAt === old.s) patch.runStartedAt = s;
+      else ms += new Date(old.s).getTime() - start.getTime();
+    }
+    list[index] = { s, e };
+    list.sort((a, b) => a.s.localeCompare(b.s));
+    patch.sessions = list;
+    patch.elapsedMs = Math.max(0, ms);
+    patch.firstStartedAt = list[0].s;
+    if (t.finishedAt) { const last = list[list.length - 1]; if (last.e) patch.finishedAt = last.e; }
+    updateTask(id, patch);
+  }, [updateTask]);
+
   const setFinishTime = useCallback((id: ID, at: Date) => {
     const t = stateRef.current.tasks.find(x => x.id === id);
     if (!t || !t.finishedAt) return;
-    const delta = at.getTime() - new Date(t.finishedAt).getTime();
-    updateTask(id, { finishedAt: at.toISOString(), elapsedMs: Math.max(0, t.elapsedMs + delta) });
+    const list = workSessions(t);
+    const i = list.length - 1;
+    if (i < 0) { updateTask(id, { finishedAt: at.toISOString() }); return; }
+    editSession(id, i, new Date(list[i].s), at);
+  }, [updateTask, editSession]);
+
+  const setStartTime = useCallback((id: ID, at: Date) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t || !t.firstStartedAt) return;
+    const list = workSessions(t);
+    if (!list.length) { updateTask(id, { firstStartedAt: at.toISOString() }); return; }
+    editSession(id, 0, at, list[0].e ? new Date(list[0].e) : null);
+  }, [updateTask, editSession]);
+
+  const resetTimer = useCallback((id: ID) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t) return () => {};
+    const keep: Partial<Task> = { firstStartedAt: t.firstStartedAt, runStartedAt: t.runStartedAt, pausedAt: t.pausedAt, finishedAt: t.finishedAt, elapsedMs: t.elapsedMs, sessions: t.sessions, reEstimates: t.reEstimates, status: t.status, reflection: t.reflection };
+    const first = stateRef.current.settings.taskStatuses.find(x => x.note?.startsWith('Default'))?.name ?? 'Not started';
+    updateTask(id, { firstStartedAt: null, runStartedAt: null, pausedAt: null, finishedAt: null, elapsedMs: 0, sessions: [], reEstimates: [], status: first, reflection: 'none' });
+    return () => updateTask(id, keep);
   }, [updateTask]);
+
+  const planTask = useCallback((id: ID, at: Date | null) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t) return;
+    const patch: Partial<Task> = { plannedStart: at ? at.toISOString() : null };
+    const today = todayISO();
+    if (at && isoDate(at) === today && !(t.myDayDate && t.myDayDate <= today) && !t.finishedAt) patch.myDayDate = today;
+    updateTask(id, patch);
+  }, [updateTask]);
+
+  // ---------- time blocks (meetings, lunch, breaks) ----------
+  const addBlock = useCallback((b: Partial<TimeBlock>): TimeBlock => {
+    const now = new Date();
+    const block: TimeBlock = { id: uid(), title: '', kind: 'meeting', startAt: now.toISOString(), endAt: new Date(now.getTime() + 30 * 60000).toISOString(), note: '', createdAt: now.toISOString(), ...b };
+    setState(st => ({ ...st, blocks: [...st.blocks, block] }));
+    write(supabase.from('time_blocks').insert({ ...blockToRow(block), user_id: userId }));
+    return block;
+  }, [write, userId]);
+  const updateBlock = useCallback((id: ID, patch: Partial<TimeBlock>) => {
+    patchList('blocks', id, patch);
+    write(supabase.from('time_blocks').update(blockToRow(patch)).eq('id', id));
+  }, [write]);
 
   // ---------- projects ----------
   const addProject = useCallback((p: Partial<Project>): Project => {
@@ -450,14 +550,20 @@ export function StoreProvider({ session, children }: { session: Session; childre
       projectById: id => (id ? pMap.get(id) : undefined),
       taskById: id => (id ? tMap.get(id) : undefined),
       addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, setStatus, removeTask, removeEntry, removeProject,
+      setStartTime, editSession, resetTimer, planTask, addBlock, updateBlock, removeBlock,
       addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead,
       updateSettings, setDisplayName, clearSample, saveCheckin, skipCheckin,
       checkinFor: (day: string) => state.checkins.find(c => c.day === day),
       hasSample: state.projects.some(p => p.isSample) || state.tasks.some(t => t.isSample) || state.entries.some(e => e.isSample) || state.checkins.some(c => c.isSample),
     };
-  }, [state, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
+  }, [state, setStartTime, editSession, resetTimer, planTask, addBlock, updateBlock, removeBlock, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
+}
+
+/** close the running session (if any) at `at` */
+function closeOpen(list: WorkSession[], at: string): WorkSession[] {
+  return list.map(x => (x.e ? x : { s: x.s, e: at < x.s ? x.s : at }));
 }
 
 /** re-render every `ms` (for live timers) */

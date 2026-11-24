@@ -65,7 +65,7 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1);
 
-    --nav-w: 248px;
+    --nav-w: 272px;
   --content-w: 1080px;
   --sheet-w: 400px;
 }

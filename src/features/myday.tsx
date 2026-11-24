@@ -8,6 +8,7 @@ import { activeTask, archivedIds, isLive, myDayTasks } from '../lib/select';
 import { fmtDayLong, isDone, isOverdue, todayISO } from '../lib/time';
 import { useMiniTimer } from './mini';
 import { SampleBanner } from './common';
+import { TimelineView } from './timeline';
 
 export function MyDayPage() {
   const st = useStore();
@@ -24,12 +25,12 @@ export function MyDayPage() {
       <div className="page-head">
         <div className="title"><span className="t-hl">My Day</span><span className="t-bm c-muted">{fmtDayLong(new Date())} · {left} to do{done ? ` · ${done} done` : ''}</span></div>
         <div className="actions">
-          <FilterButton value={filter} onChange={setFilter} showProjects />
-          <Seg value={view} onChange={v => st.updateSettings({ myDayView: v })} items={[{ value: 'list', icon: 'list', tip: 'List' }, { value: 'board', icon: 'board', tip: 'Board' }]} />
+          {view !== 'timeline' && <FilterButton value={filter} onChange={setFilter} showProjects />}
+          <Seg value={view} onChange={v => st.updateSettings({ myDayView: v })} items={[{ value: 'list', icon: 'list', tip: 'List' }, { value: 'board', icon: 'board', tip: 'Board' }, { value: 'timeline', icon: 'timeline', tip: 'Timeline' }]} />
         </div>
       </div>
       <SampleBanner />
-      <FilterChips value={filter} onChange={setFilter} shown={tasks.length} total={all.length} />
+      {view !== 'timeline' && <FilterChips value={filter} onChange={setFilter} shown={tasks.length} total={all.length} />}
 
       <div className="col gap-8">
         <div className="section-label">Now</div>
@@ -37,7 +38,7 @@ export function MyDayPage() {
       </div>
       <PlanLine />
 
-      {all.length === 0
+      {view === 'timeline' ? <TimelineView /> : all.length === 0
         ? <div className="empty"><Icon name="sun" /><div className="t-tm" style={{ color: 'var(--on-surface)' }}>Plan your day</div><div className="t-bm" style={{ maxWidth: 420 }}>Add what you’ll do today. Give each task an estimate, then press ▶ and try to beat it.</div></div>
         : view === 'board' ? <TaskBoard tasks={tasks} /> : <TaskGroups tasks={tasks} carry scope="myday" />}
       <div className="grow" />

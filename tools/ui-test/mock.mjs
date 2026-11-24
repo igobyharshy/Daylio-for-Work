@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 
 export function createMock() {
   const USER = { id: '3284feb9-a6e6-4c59-826e-e9ce61936efb', email: 'ontrack-test@example.com', aud: 'authenticated', role: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString() };
-  const db = { projects: [], tasks: [], journal_entries: [], user_settings: [], notifications: [], daily_checkins: [] };
+  const db = { projects: [], tasks: [], journal_entries: [], user_settings: [], notifications: [], daily_checkins: [], time_blocks: [] };
   const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
   const jwt = b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64({ sub: USER.id, email: USER.email, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 * 24 }) + '.sig';
   const session = () => ({ access_token: jwt, token_type: 'bearer', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, refresh_token: 'r', user: USER });
