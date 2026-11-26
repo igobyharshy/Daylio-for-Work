@@ -3,8 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import type { JournalDefaults, StatusDef, Tone } from '../lib/types';
-import { Icon } from '../ui/Icon';
-import { Btn, Chip, Confirm, Dialog, Field, IBtn, MenuList, Pill, Popover, Switch, TONES, TONE_LIST, cx, useAnchor } from '../ui/kit';
+import { Icon, type IconName } from '../ui/Icon';
+import { Btn, Chip, Confirm, Dialog, Field, IBtn, MenuList, Pill, Popover, Switch, TONES, TONE_LIST, Tag, cx, useAnchor } from '../ui/kit';
 import { TimeInput } from '../ui/pickers';
 import { useToast } from '../ui/Toast';
 import { tagChipTone, tagDot } from '../lib/select';
@@ -128,7 +128,9 @@ function StatusList({ list, onChange, kind }: { list: StatusDef[]; onChange: (l:
   const [menu, setMenu] = useState<{ i: number; el: HTMLElement } | null>(null);
   const [toneMenu, setToneMenu] = useState<{ i: number; el: HTMLElement } | null>(null);
   const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<number | null>(null);
   const locked = (n: string) => kind === 'task' && CORE.includes(n);
+  const usedCount = (n: string) => kind === 'task' ? st.tasks.filter(t => t.status === n).length : st.projects.filter(p => p.status === n).length;
   const used = (n: string) => kind === 'task' ? st.tasks.some(t => t.status === n) : st.projects.some(p => p.status === n);
   const rename = (i: number) => {
     const n = val.trim(); setEditing(null);
@@ -151,6 +153,7 @@ function StatusList({ list, onChange, kind }: { list: StatusDef[]; onChange: (l:
               : <Pill name={s.name} tone={s.tone} onClick={e => setToneMenu({ i, el: e.currentTarget as HTMLElement })} />}
             {s.note && <span className="t-bs c-muted">{s.note}</span>}
           </div>
+          {kind === 'task' && s.name !== 'Archived' && s.myDay && <Tag icon={s.myDay === 'hide' ? 'eyeOff' : 'sun'}>{s.myDay === 'hide' ? 'Hidden in My Day' : 'Always in My Day'}</Tag>}
           <IBtn sm icon="more" label="Status options" onClick={e => setMenu({ i, el: e.currentTarget as HTMLElement })} />
         </div>
       ))}
@@ -162,10 +165,28 @@ function StatusList({ list, onChange, kind }: { list: StatusDef[]; onChange: (l:
       {menu && <Popover anchor={menu.el} onClose={() => setMenu(null)} placement="below-end"><MenuList width={220} onClose={() => setMenu(null)} items={[
         { t: 'Rename', ic: 'edit', disabled: locked(list[menu.i].name), onClick: () => { setVal(list[menu.i].name); setEditing(menu.i); } },
         { t: 'Colour', ic: 'palette', keepOpen: true, onClick: () => { setToneMenu(menu); setMenu(null); } },
+        ...(kind === 'task' && list[menu.i].name !== 'Archived' ? (() => {
+          const s = list[menu.i];
+          const shown = s.myDay === 'show' || (s.myDay !== 'hide' && CORE.includes(s.name));
+          return [{ t: shown ? 'Hide from My Day' : 'Always show in My Day', ic: (shown ? 'eyeOff' : 'sun') as IconName, onClick: () => onChange(list.map((x, j) => (j === menu.i ? { ...x, myDay: shown ? 'hide' as const : 'show' as const } : x))) }];
+        })() : []),
         { divider: true },
-        { t: used(list[menu.i].name) ? 'In use — can’t delete' : 'Delete', ic: 'trash', danger: true, disabled: locked(list[menu.i].name) || used(list[menu.i].name) || list.length <= 1, onClick: () => onChange(list.filter((_, j) => j !== menu.i)) },
+        { t: used(list[menu.i].name) ? 'Delete and move its tasks…' : 'Delete', ic: 'trash', danger: true, disabled: locked(list[menu.i].name) || list.length <= 1,
+          onClick: () => { if (used(list[menu.i].name)) setRemoving(menu.i); else onChange(list.filter((_, j) => j !== menu.i)); } },
         ...(locked(list[menu.i].name) ? [{ note: 'Ontrack sets this status automatically, so it can’t be renamed or deleted.' }] : []),
       ]} /></Popover>}
+      {removing != null && list[removing] && (
+        <MoveAndDelete name={list[removing].name} count={usedCount(list[removing].name)} kind={kind}
+          options={list.filter((_, j) => j !== removing).map(s => s.name).filter(n => n !== 'Archived' || kind === 'project')}
+          onClose={() => setRemoving(null)}
+          onConfirm={to => {
+            const old = list[removing].name;
+            if (kind === 'task') st.tasks.filter(t => t.status === old).forEach(t => st.updateTask(t.id, { status: to })); // label only: finished tasks stay finished
+            else st.projects.filter(p => p.status === old).forEach(p => st.updateProject(p.id, { status: to }));
+            onChange(list.filter((_, j) => j !== removing));
+            setRemoving(null);
+          }} />
+      )}
       {toneMenu && <Popover anchor={toneMenu.el} onClose={() => setToneMenu(null)}>
         <div className="menu" style={{ padding: 12, minWidth: 0 }}><div className="row gap-8">{TONE_LIST.map((t: Tone) => (
           <button key={t} aria-label={`Colour ${t}`} onClick={() => { onChange(list.map((s, j) => (j === toneMenu.i ? { ...s, tone: t } : s))); setToneMenu(null); }}
@@ -176,11 +197,25 @@ function StatusList({ list, onChange, kind }: { list: StatusDef[]; onChange: (l:
   );
 }
 
+/** deleting a status that's in use: pick where its tasks (or projects) go */
+function MoveAndDelete({ name, count, kind, options, onClose, onConfirm }: { name: string; count: number; kind: 'task' | 'project'; options: string[]; onClose: () => void; onConfirm: (to: string) => void }) {
+  const [to, setTo] = useState(options.includes('Not started') ? 'Not started' : options[0]);
+  const what = kind === 'task' ? (count === 1 ? 'task' : 'tasks') : (count === 1 ? 'project' : 'projects');
+  return (
+    <Dialog onClose={onClose} width={420} label={`Delete ${name}`}>
+      <span className="t-hs">Delete “{name}”?</span>
+      <span className="t-bm c-muted">{count} {what} {count === 1 ? 'has' : 'have'} this status. Move {count === 1 ? 'it' : 'them'} to:</span>
+      <div className="row gap-8" style={{ flexWrap: 'wrap' }}>{options.map(o => <Chip key={o} sel={to === o} onClick={() => setTo(o)}>{o}</Chip>)}</div>
+      <div className="dialog-actions"><span className="spacer" /><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn kind="error" icon="trash" onClick={() => onConfirm(to)}>Move and delete</Btn></div>
+    </Dialog>
+  );
+}
+
 function Statuses() {
   const st = useStore();
   return (
     <div className="row gap-24" style={{ alignItems: 'flex-start' }}>
-      <div className="grow" style={{ flexBasis: 0 }}><Card title="Task statuses" sub="Drag to reorder. Click a status to change its colour.">
+      <div className="grow" style={{ flexBasis: 0 }}><Card title="Task statuses" sub="Drag to reorder. Click a status to change its colour. Use ⋮ to rename, hide from My Day or delete.">
         <StatusList kind="task" list={st.settings.taskStatuses} onChange={l => st.updateSettings({ taskStatuses: l })} />
       </Card></div>
       <div className="grow" style={{ flexBasis: 0 }}><Card title="Project statuses" sub="For the Projects board.">

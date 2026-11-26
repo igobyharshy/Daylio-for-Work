@@ -46,6 +46,8 @@ export interface Store extends StoreState {
   setStartTime: (id: ID, at: Date) => void;
   /** change one work session (Timeline · Actual); keeps the recorded time in step */
   editSession: (id: ID, index: number, start: Date, end: Date | null) => void;
+  /** replace the whole time log (drawer). The log becomes the recorded time. Returns undo. */
+  saveLog: (id: ID, list: WorkSession[]) => () => void;
   /** wipe the timer (started by accident); returns undo */
   resetTimer: (id: ID) => () => void;
   /** plan when to work on a task (null clears it). Planning for today also puts it in My Day. */
@@ -376,6 +378,30 @@ export function StoreProvider({ session, children }: { session: Session; childre
     editSession(id, 0, at, list[0].e ? new Date(list[0].e) : null);
   }, [updateTask, editSession]);
 
+  const saveLog = useCallback((id: ID, input: WorkSession[]) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t) return () => {};
+    const keep: Partial<Task> = { sessions: t.sessions, elapsedMs: t.elapsedMs, firstStartedAt: t.firstStartedAt, finishedAt: t.finishedAt, runStartedAt: t.runStartedAt, pausedAt: t.pausedAt };
+    const list = input.map(x => ({ s: x.s, e: x.e })).sort((a, b) => a.s.localeCompare(b.s));
+    const open = list.find(x => !x.e);
+    const closed = (l: WorkSession[]) => l.reduce((a, x) => a + (x.e ? Math.max(0, new Date(x.e).getTime() - new Date(x.s).getTime()) : 0), 0);
+    // An old timer saved only first start → last stop, so its stretch includes breaks and the recorded time is
+    // less than the stretch. Keep that difference while the old stretch is untouched; editing it drops it.
+    const old = workSessions(t);
+    const offset = t.elapsedMs - closed(old);
+    const first = old[0];
+    const keepsOld = !!first?.e && list.some(x => x.s === first.s && x.e === first.e);
+    const patch: Partial<Task> = {
+      sessions: list,
+      elapsedMs: Math.max(0, closed(list) + (offset < -60000 && keepsOld ? offset : 0)),
+      firstStartedAt: list[0]?.s ?? null,
+    };
+    if (t.runStartedAt) patch.runStartedAt = open ? open.s : t.runStartedAt;
+    if (t.finishedAt) { const last = list[list.length - 1]; if (last?.e) patch.finishedAt = last.e; }
+    updateTask(id, patch);
+    return () => updateTask(id, keep);
+  }, [updateTask]);
+
   const resetTimer = useCallback((id: ID) => {
     const t = stateRef.current.tasks.find(x => x.id === id);
     if (!t) return () => {};
@@ -550,13 +576,13 @@ export function StoreProvider({ session, children }: { session: Session; childre
       projectById: id => (id ? pMap.get(id) : undefined),
       taskById: id => (id ? tMap.get(id) : undefined),
       addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, setStatus, removeTask, removeEntry, removeProject,
-      setStartTime, editSession, resetTimer, planTask, addBlock, updateBlock, removeBlock,
+      setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock,
       addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead,
       updateSettings, setDisplayName, clearSample, saveCheckin, skipCheckin,
       checkinFor: (day: string) => state.checkins.find(c => c.day === day),
       hasSample: state.projects.some(p => p.isSample) || state.tasks.some(t => t.isSample) || state.entries.some(e => e.isSample) || state.checkins.some(c => c.isSample),
     };
-  }, [state, setStartTime, editSession, resetTimer, planTask, addBlock, updateBlock, removeBlock, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
+  }, [state, setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

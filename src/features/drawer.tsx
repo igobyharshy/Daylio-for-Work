@@ -4,15 +4,15 @@ import { useUI } from '../app/ui';
 import type { Step, Task } from '../lib/types';
 import { Icon, type IconName } from '../ui/Icon';
 import { Btn, IBtn, MenuList, Pill, Popover, Switch, Tag, cx, useAnchor } from '../ui/kit';
-import { DayTimeInput, DuePicker, EstimateDialog } from '../ui/pickers';
-import { useToast } from '../ui/Toast';
+import { DuePicker, EstimateDialog } from '../ui/pickers';
+import { TimeLog } from './timelog';
 import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot } from './tasks';
 import { statusTone, avgOverrunMin, tagChipTone } from '../lib/select';
 import { useMiniTimer } from './mini';
 import { useDragSort } from './dnd';
 import {
-  atTime, cap, dueAt, dueLabel, elapsed, fmtClock, fmtDayComma, fmtDayShort, fmtMin, fmtTimer, hhmm, isDone, isOverEstimate, isOverdue,
-  isoDate, plannedRange, relDay, remainingMs, startBy, todayISO, totalEstimateMin, uid, workSessions,
+  atTime, cap, dueAt, dueLabel, fmtClock, fmtDayComma, fmtDayShort, fmtMin, hhmm, isDone, isOverEstimate, isOverdue,
+  isoDate, plannedRange, relDay, remainingMs, startBy, timerView, todayISO, totalEstimateMin, uid,
 } from '../lib/time';
 
 function Prop({ icon, k, children }: { icon: IconName; k: string; children: React.ReactNode }) {
@@ -33,10 +33,8 @@ export function TaskDrawer({ t }: { t: Task }) {
   const [estOpen, setEstOpen] = useState(false);
   const [title, setTitle] = useState(t.title);
   const [note, setNote] = useState(t.note);
-  const [editFinish, setEditFinish] = useState(false);
-  const [editStart, setEditStart] = useState(false);
   const pla = useAnchor();
-  useEffect(() => { setTitle(t.title); setNote(t.note); setEditFinish(false); setEditStart(false); }, [t.id]);
+  useEffect(() => { setTitle(t.title); setNote(t.note); }, [t.id]);
   useEffect(() => { if (document.activeElement?.getAttribute('aria-label') !== 'Task title') setTitle(t.title); }, [t.title]);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -90,9 +88,18 @@ export function TaskDrawer({ t }: { t: Task }) {
           <div className="timer-block" style={{ background: amber ? 'var(--warning-container)' : 'var(--primary-container)', color: amber ? 'var(--on-warning-container)' : 'var(--on-primary-container)' }}>
             <div className="row gap-8">
               <div className="col grow">
-                <span className="t-hs tnum" style={{ color: amber ? 'var(--warning)' : 'var(--primary)' }}>{t.estimateMin ? fmtTimer(remainingMs(t, now)) : fmtTimer(elapsed(t, now))}</span>
-                <span className="t-bs">{!t.estimateMin ? (running ? 'elapsed · no estimate' : 'elapsed · paused') : amber ? (running ? 'over estimate' : 'over estimate · paused') : running ? `left · done by ${fmtClock(new Date(now + remainingMs(t, now)))}` : 'left · paused'}</span>
+                {(() => {
+                  const dir = st.settings.timerDirection ?? 'down';
+                  const v = timerView(t, now, dir);
+                  const sub = !t.estimateMin ? (running ? 'elapsed · no estimate' : 'elapsed · paused')
+                    : `${v.sub}${!running ? ' · paused' : !amber ? ` · done by ${fmtClock(new Date(now + remainingMs(t, now)))}` : ''}`;
+                  return <>
+                    <span className="t-hs tnum" style={{ color: amber ? 'var(--warning)' : 'var(--primary)' }}>{v.main}</span>
+                    <span className="t-bs">{sub}</span>
+                  </>;
+                })()}
               </div>
+              {!!t.estimateMin && <IBtn icon="swap" label={st.settings.timerDirection === 'up' ? 'Count down from the estimate' : 'Count up to the estimate'} onClick={() => st.updateSettings({ timerDirection: st.settings.timerDirection === 'up' ? 'down' : 'up' })} />}
               <IBtn icon="pip" label="Pop out mini timer" onClick={() => mini.open()} />
               {running ? <IBtn icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" kind="pc" onClick={() => act.start(t)} />}
               <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
@@ -152,21 +159,10 @@ export function TaskDrawer({ t }: { t: Task }) {
               </span>
             </Prop>
           )}
-          {t.firstStartedAt && (
-            <Prop icon="play" k="Started">
-              {editStart
-                ? <StartEdit t={t} onClose={() => setEditStart(false)} />
-                : <button className="val-btn state" onClick={() => setEditStart(true)} data-tip="Edit start time">{fmtDayShort(t.firstStartedAt)} · {fmtClock(t.firstStartedAt)}<Icon name="edit" className="hover-only" /></button>}
-            </Prop>
-          )}
-          {done && (
-            <Prop icon="checkCircleO" k="Finished">
-              {editFinish
-                ? <FinishEdit t={t} onClose={() => setEditFinish(false)} />
-                : <button className="val-btn state" onClick={() => setEditFinish(true)} data-tip="Edit finish time">{fmtDayShort(t.finishedAt!)} · {fmtClock(t.finishedAt!)}<Icon name="edit" className="hover-only" /></button>}
-            </Prop>
-          )}
         </div>
+
+        {/* Time log: every stretch of work, punch-in / punch-out style */}
+        <TimeLog key={t.id} t={t} />
 
         {/* Note */}
         <div className="field multi" style={{ '--label-bg': 'var(--surface-low)' } as React.CSSProperties}>
@@ -284,47 +280,4 @@ function Steps({ t }: { t: Task }) {
 function nextSlot() {
   const d = new Date(Math.ceil(Date.now() / (15 * 60000)) * 15 * 60000);
   return hhmm(d);
-}
-
-/** E18 — inline edit of the finish time (day + time, e.g. a timer left running overnight) */
-function FinishEdit({ t, onClose }: { t: Task; onClose: () => void }) {
-  const st = useStore();
-  const f = new Date(t.finishedAt!);
-  const [v, setV] = useState(f);
-  const list = workSessions(t);
-  const lastStart = list.length ? new Date(list[list.length - 1].s) : t.firstStartedAt ? new Date(t.firstStartedAt) : null;
-  const invalid = (lastStart && v < lastStart) || v.getTime() > Date.now() + 60000;
-  const took = Math.max(0, t.elapsedMs + (v.getTime() - f.getTime()));
-  return (
-    <div className="col gap-8" style={{ padding: '8px 0' }}>
-      <DayTimeInput value={v} onChange={setV} label="Finish time" minDate={lastStart ? isoDate(lastStart) : undefined} maxDate={todayISO()} />
-      <span className={cx('t-bs', invalid ? 'c-error' : 'c-muted')}>{invalid ? 'Finish time must be after the start and not in the future.' : `Took ${fmtMin(took / 60000)}${t.estimateMin ? ` · estimate ${fmtMin(t.estimateMin)}` : ''}`}</span>
-      <div className="row gap-8"><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!!invalid} onClick={() => { st.setFinishTime(t.id, v); onClose(); }}>Save</Btn></div>
-    </div>
-  );
-}
-
-/** Edit when the task was started; "Reset timer" undoes an accidental start */
-function StartEdit({ t, onClose }: { t: Task; onClose: () => void }) {
-  const st = useStore();
-  const toast = useToast();
-  const f = new Date(t.firstStartedAt!);
-  const [v, setV] = useState(f);
-  const first = workSessions(t)[0];
-  const limit = first?.e ? new Date(first.e) : new Date();
-  const invalid = v > limit || v.getTime() > Date.now() + 60000;
-  const took = Math.max(0, elapsed(t) + (f.getTime() - v.getTime()));
-  const reset = () => {
-    const undo = st.resetTimer(t.id);
-    onClose();
-    toast.show('Timer reset. The task is back to not started.', { icon: 'refresh', action: { label: 'Undo', onClick: undo } });
-  };
-  return (
-    <div className="col gap-8" style={{ padding: '8px 0' }}>
-      <DayTimeInput value={v} onChange={setV} label="Start time" maxDate={todayISO()} />
-      <span className={cx('t-bs', invalid ? 'c-error' : 'c-muted')}>{invalid ? (first?.e ? 'Start must be before the end of the first session.' : 'Start can’t be in the future.') : `Time recorded ${fmtMin(took / 60000)}${t.estimateMin ? ` · estimate ${fmtMin(t.estimateMin)}` : ''}`}</span>
-      <div className="row gap-8"><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!!invalid} onClick={() => { st.setStartTime(t.id, v); onClose(); }}>Save</Btn></div>
-      <div className="row gap-4 t-bs c-muted" style={{ flexWrap: 'wrap' }}>Started by accident?<Btn kind="text" icon="refresh" onClick={reset}>Reset timer</Btn></div>
-    </div>
-  );
 }

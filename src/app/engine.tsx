@@ -119,7 +119,8 @@ export function Engine() {
       const t = activeTask(ref.current.st.tasks, ref.current.st.projects);
       if (t && t.runStartedAt) {
         const rem = remainingMs(t);
-        document.title = `${t.estimateMin ? (rem < 0 ? fmtTimer(rem) + ' over' : fmtTimer(rem)) : fmtTimer(elapsed(t))} · ${t.title}`;
+        const up = ref.current.st.settings.timerDirection === 'up' && !!t.estimateMin;
+        document.title = `${up ? fmtTimer(elapsed(t)) : t.estimateMin ? (rem < 0 ? fmtTimer(rem) + ' over' : fmtTimer(rem)) : fmtTimer(elapsed(t))} · ${t.title}`;
       } else document.title = 'Ontrack';
     }, 1000);
     return () => { clearInterval(id); document.title = 'Ontrack'; };

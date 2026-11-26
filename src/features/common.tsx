@@ -6,7 +6,7 @@ import { activeTask } from '../lib/select';
 import { Icon } from '../ui/Icon';
 import { Btn, Confirm, IBtn, cx } from '../ui/kit';
 import { useToast } from '../ui/Toast';
-import { elapsed, fmtTimer, isOverEstimate, remainingMs } from '../lib/time';
+import { elapsed, fmtTimer, isOverEstimate, remainingMs, timerView } from '../lib/time';
 import { useTaskActions } from './tasks';
 import { useMiniTimer } from './mini';
 
@@ -42,13 +42,14 @@ export function TimerChip({ side = false }: { side?: boolean }) {
   if (!t || loc.pathname.startsWith('/my-day')) return null;
   const over = isOverEstimate(t, now);
   const time = t.estimateMin ? fmtTimer(remainingMs(t, now)) : fmtTimer(elapsed(t, now));
+  const up = st.settings.timerDirection === 'up' && !!t.estimateMin;
   if (side) return (
     <div className={cx('timer-chip in-side', over && 'amber', !running && 'paused')}>
       <button className="tc-main state" onClick={() => ui.openTask(t.id)} data-tip="Open task">
         <Icon name={over ? 'warn' : running ? 'hourglass' : 'pause'} size={18} />
         <span className="col grow" style={{ minWidth: 0 }}>
           <span className="t-lm ellipsis">{t.title}</span>
-          <span className="t-bs tnum">{time}{t.estimateMin ? (over ? ' over' : ' left') : ' elapsed'}{running ? '' : ' · paused'}</span>
+          <span className="t-bs tnum">{up ? timerView(t, now, 'up').line : <>{time}{t.estimateMin ? (over ? ' over' : ' left') : ' elapsed'}</>}{running ? '' : ' · paused'}</span>
         </span>
       </button>
       {running ? <IBtn sm icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn sm icon="play" label="Resume" onClick={() => act.start(t)} />}

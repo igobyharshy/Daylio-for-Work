@@ -39,13 +39,26 @@ export function activeTask(tasks: Task[], projects: Project[] = []): Task | unde
 }
 
 /** One set of groups for every list and board: settings order, core three always, others only when used. */
-export function statusGroups(statuses: StatusDef[], tasks: Task[]): { def: StatusDef; tasks: Task[] }[] {
+/** is this status a group in My Day? (Archived never is) */
+export const shownInMyDay = (def: StatusDef, inUse: boolean) =>
+  def.name !== 'Archived' && def.myDay !== 'hide' && (def.myDay === 'show' || CORE_STATUSES.includes(def.name) || inUse);
+
+/**
+ * Status groups for lists and boards. In My Day (`myDay`), each status's show/hide choice applies;
+ * tasks in a hidden group are left out (see `hiddenTasks`).
+ */
+export function statusGroups(statuses: StatusDef[], tasks: Task[], myDay = false): { def: StatusDef; tasks: Task[] }[] {
   const names = statuses.map(s => s.name);
   const home = (t: Task) => (names.includes(t.status) && t.status !== 'Archived' ? t.status : t.finishedAt ? 'Done' : 'Not started');
   const present = new Set(tasks.map(home));
-  const defs = statuses.filter(s => s.name !== 'Archived' && (CORE_STATUSES.includes(s.name) || present.has(s.name)));
-  CORE_STATUSES.forEach(c => { if (!defs.some(d => d.name === c)) defs.push({ name: c, tone: c === 'In progress' ? 'blue' : c === 'Done' ? 'green' : 'neutral' }); });
+  const defs = statuses.filter(s => myDay ? shownInMyDay(s, present.has(s.name)) : s.name !== 'Archived' && (CORE_STATUSES.includes(s.name) || present.has(s.name)));
+  CORE_STATUSES.forEach(c => { if (!names.includes(c) && !defs.some(d => d.name === c)) defs.push({ name: c, tone: c === 'In progress' ? 'blue' : c === 'Done' ? 'green' : 'neutral' }); });
   return defs.map(def => ({ def, tasks: tasks.filter(t => home(t) === def.name).sort((a, b) => a.sort - b.sort) }));
+}
+/** tasks that sit in groups hidden from My Day */
+export function hiddenTasks(statuses: StatusDef[], tasks: Task[]) {
+  const shown = new Set(statusGroups(statuses, tasks, true).flatMap(g => g.tasks.map(t => t.id)));
+  return tasks.filter(t => !shown.has(t.id));
 }
 
 /** sort value that places a task between two neighbours */

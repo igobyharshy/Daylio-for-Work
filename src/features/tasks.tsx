@@ -7,7 +7,7 @@ import { Btn, Chip, Field, IBtn, MenuList, Popover, Switch, Tag, cx, useAnchor, 
 import { DuePicker, EstimateDialog, DateTimePicker, remindOptions } from '../ui/pickers';
 import { useToast } from '../ui/Toast';
 import {
-  addDays, dueAt, dueLabel, elapsed, fmtClock, fmtMin, fmtMs, fmtTimer, isDone, isOverEstimate, isOverdue, outcome, relDay, remainingMs,
+  addDays, dueAt, dueLabel, elapsed, fmtClock, fmtMin, fmtMs, fmtTimer, isDone, isOverEstimate, isOverdue, outcome, relDay, remainingMs, timerView,
   todayISO, totalEstimateMin, cap, isoDate, atTime, parseQuickAdd,
 } from '../lib/time';
 import { avgOverrunMin, sortBetween, statusGroups } from '../lib/select';
@@ -129,6 +129,8 @@ export function TaskMenu({ t, anchor, onClose }: { t: Task; anchor: HTMLElement 
 
 /** time / state chip at the end of a row or card */
 function TimeChip({ t, now }: { t: Task; now: number }) {
+  const { settings } = useStore();
+  const up = settings.timerDirection === 'up';
   const running = !!t.runStartedAt;
   const over = isOverEstimate(t, now);
   if (!t.estimateMin) {
@@ -136,8 +138,8 @@ function TimeChip({ t, now }: { t: Task; now: number }) {
     return <span className="t-bs c-faint">No estimate</span>;
   }
   if (over) return <Tag kind="warn" icon="hourglass">{!running ? 'Paused · ' : ''}+{fmtTimer(-remainingMs(t, now)).replace('+', '')} over</Tag>;
-  if (running) return <span className="t-ll c-primary tnum">{fmtTimer(remainingMs(t, now))} left</span>;
-  if (t.elapsedMs > 0) return <Tag icon="pause">{fmtTimer(remainingMs(t, now))} left</Tag>;
+  if (running) return <span className="t-ll c-primary tnum">{up ? timerView(t, now, 'up').line : `${fmtTimer(remainingMs(t, now))} left`}</span>;
+  if (t.elapsedMs > 0) return <Tag icon="pause">{up ? timerView(t, now, 'up').line : `${fmtTimer(remainingMs(t, now))} left`}</Tag>;
   return <Tag icon="hourglass">{fmtMin(totalEstimateMin(t))}</Tag>;
 }
 
@@ -157,6 +159,10 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   const inMyDay = act.inMyDay(t);
   const ma = useAnchor();
   const isFlash = flash?.id === t.id && Date.now() - flash.at < 1500;
+  // calm rows: just the title; details fade in on hover. A live or paused timer stays visible.
+  const calm = (st.settings.rowDetails ?? 'hover') === 'hover';
+  const keepChip = running || (!done && t.elapsedMs > 0);
+  const overdue = !done && !!t.dueDate && isOverdue(t, st.settings, now);
   const meta: ReactNode[] = [];
   if (showProject && p) meta.push(<ProjectLabel p={p} />);
   if (!showProject && showSun && inMyDay && !done) meta.push(<span className="m primary"><Icon name="sunFill" />My Day</span>);
@@ -167,7 +173,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m" data-tip={`Reminder ${relDay(isoDate(new Date(t.remindAt)))} ${fmtClock(t.remindAt)}`}><Icon name="bell" /></span>);
 
   return (
-    <div className={cx('task-row', done && 'done', amber && 'amber', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
+    <div className={cx('task-row', calm && 'calm', done && 'done', amber && 'amber', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
       onClick={() => ui.openTask(t.id)} data-task={t.id}>
       {drag && <span className="grip" data-drag-handle aria-hidden><Icon name="drag" /></span>}
       <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} data-tip={done ? 'Mark not done' : 'Mark done'}
@@ -175,13 +181,16 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
         <Icon name={done ? 'checkCircle' : 'circle'} />
       </button>
       <div className="text">
-        <span className="title ellipsis">{t.title || 'Untitled task'}</span>
+        <span className="row gap-6" style={{ minWidth: 0 }}>
+          <span className="title ellipsis">{t.title || 'Untitled task'}</span>
+          {calm && overdue && <span className="overdue-dot" data-tip="Overdue" aria-label="Overdue" />}
+        </span>
         {meta.length > 0 && <Meta>{meta}</Meta>}
       </div>
       <div className="trail" onClick={e => e.stopPropagation()}>
-        {done ? <OutcomeChips t={t} /> : <TimeChip t={t} now={now} />}
-        {showSun && !done && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? (running ? 'Running tasks stay in My Day' : 'Remove from My Day') : 'Add to My Day'} className={inMyDay ? 'on-primary' : ''} onClick={() => act.toggleMyDay(t)} />}
-        {!done && (running ? <IBtn icon="pause" kind="pc" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" kind="pc" label={t.elapsedMs ? 'Resume' : 'Start timer'} onClick={() => act.start(t)} />)}
+        <span className={cx('row gap-6', calm && !keepChip && 'quiet')}>{done ? <OutcomeChips t={t} /> : <TimeChip t={t} now={now} />}</span>
+        {showSun && !done && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? (running ? 'Running tasks stay in My Day' : 'Remove from My Day') : 'Add to My Day'} className={cx(inMyDay ? 'on-primary' : '', calm && 'quiet')} onClick={() => act.toggleMyDay(t)} />}
+        {!done && (running ? <IBtn icon="pause" kind="pc" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" kind="pc" className={cx(calm && 'quiet')} label={t.elapsedMs ? 'Resume' : 'Start timer'} onClick={() => act.start(t)} />)}
         <IBtn icon="moreV" label="More" className="row-more" kind={ma.isOpen ? 'selected' : 'standard'} onClick={e => ma.open(e)} />
       </div>
       {ma.isOpen && <TaskMenu t={t} anchor={ma.el} onClose={ma.close} />}
@@ -198,8 +207,8 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   const now = useNow(1000, running);
   const rem = remainingMs(t, now);
   const amber = isOverEstimate(t, now);
-  const total = totalEstimateMin(t) * 60000;
-  const pct = total ? Math.min(100, (elapsed(t, now) / total) * 100) : 0;
+  const dir = st.settings.timerDirection ?? 'down';
+  const v = timerView(t, now, dir);
   const p = st.projectById(t.projectId);
   const stepsDone = t.steps.filter(s => s.done).length;
   const meta: ReactNode[] = [];
@@ -210,7 +219,7 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   if (!running) meta.push(<span className="m"><Icon name="pause" />Paused</span>);
   return (
     <div className={cx('run-card', amber && 'amber')}>
-      <Ring pct={amber ? 100 : pct} size={44} stroke={4} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? 'color-mix(in srgb, var(--warning) 35%, var(--warning-container))' : 'var(--surface-lowest)'}>
+      <Ring pct={v.pct} size={44} stroke={4} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? 'color-mix(in srgb, var(--warning) 35%, var(--warning-container))' : 'var(--surface-lowest)'}>
         <Icon name={amber ? 'warn' : running ? 'hourglass' : 'pause'} style={{ color: amber ? 'var(--warning)' : 'var(--primary)' }} />
       </Ring>
       <button className="col grow" style={{ textAlign: 'left', gap: 4, minWidth: 0 }} onClick={() => ui.openTask(t.id)}>
@@ -218,10 +227,11 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
         <Meta>{meta}</Meta>
       </button>
       <div className="timer">
-        <span className="big">{t.estimateMin ? fmtTimer(rem) : fmtTimer(elapsed(t, now))}</span>
-        <span className="t-bs">{!t.estimateMin ? 'elapsed · no estimate' : amber ? 'over estimate' : `left of ${fmtMin(totalEstimateMin(t))}`}</span>
+        <span className="big">{v.main}</span>
+        <span className="t-bs">{!t.estimateMin ? 'elapsed · no estimate' : v.sub}</span>
       </div>
       <div className="row gap-8">
+        {!!t.estimateMin && <IBtn icon="swap" label={dir === 'up' ? 'Count down from the estimate' : 'Count up to the estimate'} onClick={() => st.updateSettings({ timerDirection: dir === 'up' ? 'down' : 'up' })} />}
         {amber && running && <Btn kind="warn-outlined" icon="edit" onClick={() => ui.openWhatHappened(t.id)}>What happened?</Btn>}
         <IBtn icon="pip" label="Pop out mini timer" onClick={onPopOut} />
         {running ? <IBtn icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" onClick={() => act.start(t)} />}
@@ -236,11 +246,11 @@ export function NothingRunning() {
 }
 
 // ---------- moving tasks between groups / positions ----------
-export function useMoveTask(tasks: Task[]) {
+export function useMoveTask(tasks: Task[], myDay = false) {
   const st = useStore();
   return (id: string, group: string, before: string | null) => {
     const t = st.taskById(id); if (!t) return;
-    const groups = statusGroups(st.settings.taskStatuses, tasks);
+    const groups = statusGroups(st.settings.taskStatuses, tasks, myDay);
     const g = groups.find(x => x.def.name === group); if (!g) return;
     const list = g.tasks.filter(x => x.id !== id);
     const idx = before ? Math.max(0, list.findIndex(x => x.id === before)) : list.length;
@@ -258,11 +268,11 @@ function useCollapsed(key: string) {
 }
 
 /** Status-grouped list (My Day and project pages): same groups as the board. */
-export function TaskGroups({ tasks, showProject = true, showSun = false, carry = false, scope }: { tasks: Task[]; showProject?: boolean; showSun?: boolean; carry?: boolean; scope: string }) {
+export function TaskGroups({ tasks, showProject = true, showSun = false, carry = false, scope, myDay = false }: { tasks: Task[]; showProject?: boolean; showSun?: boolean; carry?: boolean; scope: string; myDay?: boolean }) {
   const st = useStore();
-  const move = useMoveTask(tasks);
+  const move = useMoveTask(tasks, myDay);
   const drag = useDragSort(move);
-  const groups = statusGroups(st.settings.taskStatuses, tasks);
+  const groups = statusGroups(st.settings.taskStatuses, tasks, myDay);
   return (
     <div className="col gap-24">
       {groups.map(g => <Group key={g.def.name} name={g.def.name} tone={g.def.tone} tasks={g.tasks} scope={scope} drag={drag} showProject={showProject} showSun={showSun} carry={carry} />)}
@@ -428,14 +438,14 @@ export function EstimateFirstHost() {
 }
 
 // ---------- Board: the same groups as the list ----------
-export function TaskBoard({ tasks, showProject = true }: { tasks: Task[]; showProject?: boolean }) {
+export function TaskBoard({ tasks, showProject = true, myDay = false }: { tasks: Task[]; showProject?: boolean; myDay?: boolean }) {
   const st = useStore();
   const ui = useUI();
   const act = useTaskActions();
   const now = useNow(1000);
-  const move = useMoveTask(tasks);
+  const move = useMoveTask(tasks, myDay);
   const drag = useDragSort(move);
-  const groups = statusGroups(st.settings.taskStatuses, tasks);
+  const groups = statusGroups(st.settings.taskStatuses, tasks, myDay);
   return (
     <div className="board">
       {groups.map(g => (

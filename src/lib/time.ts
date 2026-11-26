@@ -104,6 +104,27 @@ export function plannedRange(t: Task): [Date, Date] | null {
   return [s, new Date(s.getTime() + len * 60000)];
 }
 export const isDone = (t: Task) => !!t.finishedAt;
+/**
+ * What a timer shows, in either direction. Down: time left, ring empties. Up: time worked, ring fills.
+ * Without an estimate both just count up.
+ */
+export function timerView(t: Task, now: number, dir: 'down' | 'up' = 'down') {
+  const el = elapsed(t, now);
+  const total = totalEstimateMin(t) * 60000;
+  if (!total) return { main: fmtTimer(el), sub: 'elapsed', over: false, pct: 0, line: `${fmtTimer(el)} elapsed` };
+  const rem = total - el;
+  const over = rem < 0;
+  const est = fmtMin(total / 60000);
+  if (dir === 'up') return {
+    main: fmtTimer(el), sub: over ? `${fmtTimer(rem)} over` : `of ${est}`, over,
+    pct: over ? 100 : (el / total) * 100, line: over ? `${fmtTimer(el)} · ${fmtTimer(rem)} over` : `${fmtTimer(el)} of ${est}`,
+  };
+  return {
+    main: fmtTimer(rem), sub: over ? 'over estimate' : `left of ${est}`, over,
+    pct: over ? 100 : (rem / total) * 100, line: over ? `${fmtTimer(rem)} over` : `${fmtTimer(rem)} left`,
+  };
+}
+
 export function remainingMs(t: Task, now = Date.now()) {
   return totalEstimateMin(t) * 60000 - elapsed(t, now);
 }

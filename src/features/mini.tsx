@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
@@ -6,7 +6,7 @@ import { activeTask } from '../lib/select';
 import { Icon } from '../ui/Icon';
 import { Btn, IBtn, Ring, cx } from '../ui/kit';
 import { useToast } from '../ui/Toast';
-import { elapsed, fmtMin, fmtTimer, isOverEstimate, remainingMs, totalEstimateMin } from '../lib/time';
+import { isOverEstimate, timerView } from '../lib/time';
 import { useTaskActions } from './tasks';
 
 interface Mini { open: () => void; close: () => void; isOpen: boolean; supported: boolean }
@@ -25,7 +25,16 @@ export function MiniTimerProvider({ children }: { children: ReactNode }) {
     if (win) { win.focus(); return; }
     try {
       const w = await window.documentPictureInPicture!.requestWindow({ width: 240, height: 240 });
-      document.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => w.document.head.appendChild(n.cloneNode(true)));
+      // copy the app's CSS straight into the window (instant, no network); fall back to the link if a sheet can't be read
+      [...document.styleSheets].forEach(sheet => {
+        try {
+          const style = w.document.createElement('style');
+          style.textContent = [...sheet.cssRules].map(r => r.cssText).join('\n');
+          w.document.head.appendChild(style);
+        } catch {
+          if (sheet.ownerNode) w.document.head.appendChild(sheet.ownerNode.cloneNode(true));
+        }
+      });
       w.document.body.style.margin = '0';
       w.document.title = 'Ontrack timer';
       w.addEventListener('pagehide', () => setWin(null));
@@ -50,36 +59,54 @@ export function MiniTimerProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** the mini window is designed at this size and scales uniformly to whatever size the window is */
+const STAGE = 240;
+
 function MiniTimer({ onClose }: { onClose: () => void }) {
   const st = useStore();
   const ui = useUI();
   const act = useTaskActions();
   const t = activeTask(st.tasks, st.projects);
   const now = useNow(1000);
+  const ref = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useLayoutEffect(() => {
+    const w = ref.current?.ownerDocument.defaultView;
+    if (!w) return;
+    const fit = () => setScale(Math.max(0.25, Math.min(w.innerWidth / STAGE, w.innerHeight / STAGE, 4)));
+    fit();
+    w.addEventListener('resize', fit);
+    return () => w.removeEventListener('resize', fit);
+  }, []);
   useEffect(() => { if (!t) { const id = setTimeout(onClose, 4000); return () => clearTimeout(id); } }, [t, onClose]);
-  if (!t) return <div className="mini"><Icon name="checkCircle" size={40} /><span className="t-ts">Nothing running</span></div>;
-  const amber = isOverEstimate(t, now);
-  const total = totalEstimateMin(t) * 60000;
-  const pct = total ? Math.min(100, (elapsed(t, now) / total) * 100) : 0;
-  const rem = remainingMs(t, now);
-  return (
-    <div className={cx('mini', amber && 'amber')}>
-      <div className="top">
-        <IBtn icon="open" label="Open in Ontrack" onClick={() => { window.focus(); ui.openTask(t.id); }} />
-        <IBtn icon="close" label="Close mini timer" onClick={onClose} />
-      </div>
-      <Ring pct={amber ? 100 : pct} size={150} stroke={8} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? 'color-mix(in srgb, var(--warning) 35%, var(--warning-container))' : 'var(--surface-lowest)'}>
-        <div className="col" style={{ alignItems: 'center' }}>
-          <span className="tnum" style={{ font: '400 28px/36px var(--font)', color: amber ? 'var(--warning)' : 'var(--primary)' }}>{t.estimateMin ? fmtTimer(rem) : fmtTimer(elapsed(t, now))}</span>
-          <span className="t-bs">{!t.estimateMin ? 'elapsed' : amber ? 'over estimate' : `left of ${fmtMin(totalEstimateMin(t))}`}</span>
-          {!t.runStartedAt && <span className="t-lm" style={{ marginTop: 2 }}>Paused</span>}
-        </div>
-      </Ring>
-      <span className="t-bs ellipsis" style={{ maxWidth: 200 }}>{t.title}</span>
-      <div className="done row gap-8" style={{ position: 'absolute', bottom: 10 }}>
-        {t.runStartedAt ? <IBtn icon="pause" label="Pause" kind="pc" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" kind="pc" onClick={() => act.start(t)} />}
-        <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
-      </div>
+  const dir = st.settings.timerDirection ?? 'down';
+  const stage = (body: ReactNode, amber = false) => (
+    <div ref={ref} className={cx('mini', amber && 'amber')}>
+      <div className="mini-stage" style={{ width: STAGE, height: STAGE, transform: `translate(-50%, -50%) scale(${scale})` }}>{body}</div>
     </div>
   );
+  if (!t) return stage(<div className="col gap-8" style={{ alignItems: 'center' }}><Icon name="checkCircle" size={40} /><span className="t-ts">Nothing running</span></div>);
+  const amber = isOverEstimate(t, now);
+  const v = timerView(t, now, dir);
+  const accent = amber ? 'var(--warning)' : 'var(--primary)';
+  return stage(<>
+    <div className="top">
+      <IBtn icon="open" label="Open in Ontrack" onClick={() => { window.focus(); ui.openTask(t.id); }} />
+      <span className="grow" />
+      {!!t.estimateMin && <IBtn icon="swap" label={dir === 'up' ? 'Count down from the estimate' : 'Count up to the estimate'} onClick={() => st.updateSettings({ timerDirection: dir === 'up' ? 'down' : 'up' })} />}
+      <IBtn icon="close" label="Close mini timer" onClick={onClose} />
+    </div>
+    <Ring pct={v.pct} size={150} stroke={8} color={accent} track={`color-mix(in srgb, ${accent} 18%, var(--surface))`}>
+      <div className="col" style={{ alignItems: 'center' }}>
+        <span className="tnum" style={{ font: '400 28px/36px var(--font)', color: accent }}>{v.main}</span>
+        <span className="t-bs c-muted">{v.sub}</span>
+        {!t.runStartedAt && <span className="t-lm" style={{ marginTop: 2 }}>Paused</span>}
+      </div>
+    </Ring>
+    <span className="t-bs ellipsis" style={{ maxWidth: 200 }}>{t.title}</span>
+    <div className="done row gap-8">
+      {t.runStartedAt ? <IBtn icon="pause" label="Pause" kind="pc" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" kind="pc" onClick={() => act.start(t)} />}
+      <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
+    </div>
+  </>, amber);
 }

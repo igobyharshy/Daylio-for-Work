@@ -95,7 +95,8 @@ export interface Notif {
 
 export type Tone = 'neutral' | 'grey' | 'secondary' | 'blue' | 'green' | 'purple' | 'amber' | 'red';
 
-export interface StatusDef { name: string; tone: Tone; note?: string }
+/** myDay: 'show' = always a group in My Day, 'hide' = never; unset = core statuses always, others only when used */
+export interface StatusDef { name: string; tone: Tone; note?: string; myDay?: 'show' | 'hide' }
 
 export interface JournalDefaults {
   overEstimate: string;
@@ -127,6 +128,10 @@ export interface Settings {
   journalTags: string[];
   notif: NotifPrefs;
   myDayView: 'list' | 'board' | 'timeline';
+  /** task rows: show project, dates, due and estimate only on hover (default) or always */
+  rowDetails?: 'hover' | 'always';
+  /** timers count down from the estimate (default) or up towards it */
+  timerDirection?: 'down' | 'up';
   /** Timeline: show the plan, what actually happened, or both */
   timelineMode?: 'plan' | 'actual' | 'both';
   projectsView: 'list' | 'gallery' | 'board';
