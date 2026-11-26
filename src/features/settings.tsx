@@ -6,13 +6,14 @@ import type { JournalDefaults, StatusDef, Tone } from '../lib/types';
 import { Icon, type IconName } from '../ui/Icon';
 import { Btn, Chip, Confirm, Dialog, Field, IBtn, MenuList, Pill, Popover, Switch, TONES, TONE_LIST, Tag, cx, useAnchor } from '../ui/kit';
 import { TimeInput } from '../ui/pickers';
+import { AccentPicker } from '../app/shell';
 import { useToast } from '../ui/Toast';
 import { tagChipTone, tagDot } from '../lib/select';
 import { isMobileNow, isNative, useNotifPermission } from '../lib/native';
 import { fmtHHMM } from '../lib/time';
 import { TrackersSettings } from './trackers';
 
-const TABS = [['work-day', 'Work day'], ['default-tags', 'Default tags'], ['trackers', 'Trackers'], ['statuses', 'Statuses'], ['notifications', 'Notifications'], ['account', 'Account']] as const;
+const TABS = [['appearance', 'Appearance'], ['work-day', 'Work day'], ['default-tags', 'Default tags'], ['trackers', 'Trackers'], ['statuses', 'Statuses'], ['notifications', 'Notifications'], ['account', 'Account']] as const;
 const CORE = ['Not started', 'In progress', 'Done'];
 
 export function SettingsPage() {
@@ -24,6 +25,7 @@ export function SettingsPage() {
       <div className="tabs" role="tablist">
         {TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={cx('tab state', tab === k && 'on')} onClick={() => nav(`/settings/${k}`)}>{l}</button>)}
       </div>
+      {tab === 'appearance' && <Appearance />}
       {tab === 'work-day' && <WorkDay />}
       {tab === 'default-tags' && <DefaultTags />}
       {tab === 'trackers' && <TrackersSettings />}
@@ -222,6 +224,25 @@ function Statuses() {
       <div className="grow" style={{ flexBasis: 0 }}><Card title="Project statuses" sub="For the Projects board.">
         <StatusList kind="project" list={st.settings.projectStatuses} onChange={l => st.updateSettings({ projectStatuses: l })} />
       </Card></div>
+    </div>
+  );
+}
+
+function Appearance() {
+  const st = useStore();
+  const theme = st.settings.theme ?? 'light';
+  return (
+    <div className="col gap-24">
+      <Card title="Mode" sub="Light, dark, or follow your device.">
+        <div className="theme-seg" role="radiogroup" aria-label="Mode" style={{ margin: '4px 0 8px', maxWidth: 420 }}>
+          {([['light', 'light', 'Light'], ['dark', 'dark', 'Dark'], ['system', 'autoTheme', 'System']] as const).map(([v, ic, l]) => (
+            <button key={v} role="radio" aria-checked={theme === v} className={cx('state', theme === v && 'on')} onClick={() => st.updateSettings({ theme: v })}><Icon name={ic} />{l}</button>
+          ))}
+        </div>
+      </Card>
+      <Card title="Colour" sub="Changes buttons, highlights and the running timer. Every colour has a light and a dark version. Pink stays the “over estimate” colour, and red stays “late”.">
+        <AccentPicker big />
+      </Card>
     </div>
   );
 }

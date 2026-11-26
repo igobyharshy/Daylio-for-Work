@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
-import type { Project, Task, ID, Settings } from '../lib/types';
+import type { Project, Task, ID, Settings, Repeat } from '../lib/types';
 import { Icon } from '../ui/Icon';
-import { Btn, Chip, Field, IBtn, MenuList, Popover, Switch, Tag, cx, useAnchor, type MenuItemDef, TONES, PopOutBtn } from '../ui/kit';
+import { Btn, Chip, Dialog, Seg, Field, IBtn, MenuList, Popover, Switch, Tag, cx, useAnchor, type MenuItemDef, TONES, PopOutBtn } from '../ui/kit';
 import { DuePicker, EstimateDialog, DateTimePicker, remindOptions } from '../ui/pickers';
 import { useToast } from '../ui/Toast';
 import {
   addDays, dueAt, dueLabel, elapsed, fmtClock, fmtMin, fmtMs, fmtTimer, isDone, isOverEstimate, isOverdue, outcome, relDay, remainingMs, timerView,
-  todayISO, totalEstimateMin, cap, isoDate, atTime, parseQuickAdd,
+  todayISO, totalEstimateMin, cap, isoDate, atTime, parseQuickAdd, repeatLabel, firstRepeatDate, nextRepeatDate, weekdayOf, WEEKDAY_SHORT, parseDate,
 } from '../lib/time';
 import { avgOverrunMin, sortBetween, statusGroups } from '../lib/select';
 import { Ring } from '../ui/kit';
@@ -68,6 +68,7 @@ export function useTaskActions() {
     if (o.diffMin != null && o.diffMin > 0) parts.push(`${fmtMin(o.diffMin)} over estimate`);
     else if (o.diffMin != null && o.diffMin < 0) parts.push(`${fmtMin(-o.diffMin)} under estimate`);
     if (o.lateMin != null && o.lateMin > 0) parts.push(`${fmtMin(o.lateMin)} late`);
+    if (o.next) parts.push(`next ${relDay(o.next)}`);
     const over = (o.diffMin ?? 0) > 0 || (o.lateMin ?? 0) > 0;
     toast.show(parts.join(' · '), {
       icon: over ? 'warn' : 'checkCircle',
@@ -102,7 +103,21 @@ export function useTaskActions() {
     toast.show(`Deleted “${t.title}”`, { icon: 'trash', action: { label: 'Undo', onClick: undo }, duration: 6000 });
   };
   const setStatus = (t: Task, s: string) => st.setStatus(t.id, s);
-  return { finish, start, toggleDone, toggleMyDay, tomorrow, remove, setStatus, inMyDay, pause: (t: Task) => st.pauseTask(t.id) };
+  const skip = (t: Task) => {
+    const prev = { dueDate: t.dueDate, myDayDate: t.myDayDate, plannedStart: t.plannedStart };
+    if (t.runStartedAt) st.pauseTask(t.id);
+    const next = st.skipOccurrence(t.id);
+    if (next) toast.show(`Skipped · next ${relDay(next)}`, { icon: 'skip', action: { label: 'Undo', onClick: () => st.updateTask(t.id, prev) } });
+  };
+  /** set or clear a repeat rule; the due date moves to the first day the rule lands on */
+  const setRepeat = (t: Pick<Task, 'id' | 'dueDate' | 'myDayDate'>, r: Repeat | null) => {
+    if (!r) { st.updateTask(t.id, { repeat: null }); return; }
+    const today = todayISO();
+    const from = t.dueDate && t.dueDate > today ? t.dueDate : today;
+    const due = firstRepeatDate(r, from);
+    st.updateTask(t.id, { repeat: { ...r, nextId: null }, dueDate: due, ...(t.myDayDate && due > today ? { myDayDate: due } : {}) });
+  };
+  return { finish, start, toggleDone, toggleMyDay, tomorrow, remove, setStatus, inMyDay, skip, setRepeat, pause: (t: Task) => st.pauseTask(t.id) };
 }
 
 // ---------- Row ⋮ menu ----------
@@ -120,7 +135,8 @@ export function TaskMenu({ t, anchor, onClose }: { t: Task; anchor: HTMLElement 
     ...st.settings.taskStatuses.filter(s => s.name !== 'Archived').map(s => ({ t: s.name, dot: toneDot(s.tone), sel: t.status === s.name, onClick: () => act.setStatus(t, s.name) })),
     { divider: true },
     ...(!done ? [{ t: act.inMyDay(t) ? 'Remove from My Day' : 'Add to My Day', ic: act.inMyDay(t) ? 'sun' as const : 'sunFill' as const, disabled: act.inMyDay(t) && !!t.runStartedAt, sub: act.inMyDay(t) && t.runStartedAt ? 'Pause the timer first' : undefined, onClick: () => act.toggleMyDay(t) },
-      { t: 'Move to tomorrow', ic: 'event' as const, onClick: () => act.tomorrow(t) }] : []),
+      { t: 'Move to tomorrow', ic: 'event' as const, onClick: () => act.tomorrow(t) },
+      ...(t.repeat ? [{ t: 'Skip this one', ic: 'skip' as const, sub: `Next: ${cap(relDay(nextRepeatDate(t.repeat, t.dueDate ?? todayISO())))}`, onClick: () => act.skip(t) }] : [])] : []),
     { t: 'Move to project…', ic: 'folder', keepOpen: true, onClick: () => setMoving(true) },
     { divider: true },
     { t: 'Delete', ic: 'trash', danger: true, onClick: () => act.remove(t) },
@@ -198,6 +214,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   if (!done && t.dueDate) meta.push(<DueText t={t} settings={st.settings} now={now} />);
   if (!done && t.plannedStart) meta.push(<span className="m" data-tip="Planned on the Timeline"><Icon name="schedule" />{relDay(isoDate(new Date(t.plannedStart))) === 'today' ? '' : cap(relDay(isoDate(new Date(t.plannedStart)))) + ' '}{fmtClock(t.plannedStart)}</span>);
   if (t.steps.length) meta.push(<span className="m"><Icon name="checklist" />{stepsDone}/{t.steps.length}</span>);
+  if (t.repeat && !done) meta.push(<span className="m" data-tip="Repeats"><Icon name="repeat" />{repeatLabel(t.repeat, t.dueDate)}</span>);
   if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m" data-tip={`Reminder ${relDay(isoDate(new Date(t.remindAt)))} ${fmtClock(t.remindAt)}`}><Icon name="bell" /></span>);
 
   if (phone) return (
@@ -209,7 +226,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
         <Icon name={done ? 'checkCircle' : 'circle'} />
       </button>
       <div className="text">
-        <span className="title clamp2">{t.title || 'Untitled task'}</span>
+        <span className="title clamp2">{t.title || 'Untitled task'}{t.repeat && !done && <Icon name="repeat" size={15} className="rep-ic" aria-label={repeatLabel(t.repeat, t.dueDate)} />}</span>
         <PhoneLine t={t} now={now} overdue={overdue} />
       </div>
       {!done && (
@@ -235,6 +252,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
       <div className="text">
         <span className="row gap-6" style={{ minWidth: 0 }}>
           <span className="title ellipsis">{t.title || 'Untitled task'}</span>
+          {calm && t.repeat && !done && <Icon name="repeat" size={15} className="rep-ic" data-tip={repeatLabel(t.repeat, t.dueDate)} />}
           {calm && overdue && <span className="overdue-dot" data-tip="Overdue" aria-label="Overdue" />}
         </span>
         {meta.length > 0 && <Meta>{meta}</Meta>}
@@ -433,7 +451,8 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   const [est, setEst] = useState<number | null>(null);
   const [remind, setRemind] = useState<string | null>(null);
   const [myDay, setMyDay] = useState(inMyDay);
-  const pa = useAnchor(), da = useAnchor(), ra = useAnchor();
+  const [rep, setRep] = useState<Repeat | null>(null);
+  const pa = useAnchor(), da = useAnchor(), ra = useAnchor(), rpa = useAnchor();
   const [estOpen, setEstOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -452,13 +471,17 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
     return () => document.removeEventListener('pointerdown', h);
   }, [open, title, phone]);
   // the project stays as picked for the next task (handy when adding several)
-  const reset = () => { setTitle(''); setEst(null); setRemind(null); setDue({ date: todayISO(), time: null }); };
+  const reset = () => { setTitle(''); setEst(null); setRemind(null); setRep(null); setDue({ date: todayISO(), time: null }); };
   const submit = () => {
     const name = parsed.title.trim();
     if (!name) return;
-    const date = parsed.date ?? due.date;
+    const repeat = parsed.repeat ?? rep;
+    // a repeating task starts on the first day its rule lands on
+    let date = parsed.date ?? due.date;
+    if (repeat) date = firstRepeatDate(repeat, date && date > todayISO() ? date : todayISO());
     const addToMyDay = myDay && (!date || date <= todayISO());
-    const t = st.addTask({ title: name, projectId: proj ?? st.inbox?.id ?? null, dueDate: date, dueTime: parsed.date ? null : due.time, estimateMin: parsed.estimate ?? est, remindAt: remind, myDayDate: addToMyDay ? todayISO() : null });
+    const t = st.addTask({ title: name, projectId: proj ?? st.inbox?.id ?? null, dueDate: date, dueTime: parsed.date ? null : due.time, estimateMin: parsed.estimate ?? est, remindAt: remind,
+      myDayDate: addToMyDay ? todayISO() : repeat && myDay && date ? date : null, ...(repeat ? { repeat: { ...repeat, nextId: null } } : {}) });
     flashTask(t.id);
     const where = addToMyDay && !projectId ? 'My Day' : project?.name ?? 'Inbox';
     toast.show(`Added to ${where}${addToMyDay && projectId ? ' and My Day' : ''}`, { icon: 'checkCircle', action: { label: 'Open', onClick: () => ui.openTask(t.id) }, duration: 4000 });
@@ -479,6 +502,7 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
       {pa.isOpen && <ProjectPicker anchor={pa.el} value={proj ?? st.inbox?.id ?? null} onPick={setProj} onClose={pa.close} />}
       {da.isOpen && <Popover anchor={da.el} onClose={da.close}><DuePicker date={parsed.date ?? due.date} time={parsed.date ? null : due.time} onDone={(date, time) => { setDue({ date, time }); da.close(); }} onClear={() => { setDue({ date: null, time: null }); da.close(); }} /></Popover>}
       {ra.isOpen && <RemindPicker anchor={ra.el} onClose={ra.close} t={{ dueDate: due.date, dueTime: due.time }} value={remind} onPick={setRemind} />}
+      {rpa.isOpen && <RepeatPicker anchor={rpa.el} value={parsed.repeat ?? rep} dueDate={parsed.date ?? due.date} onClose={rpa.close} onPick={r => { setRep(r); rpa.close(); }} />}
       {estOpen && <EstimateDialog initial={parsed.estimate ?? est} onSet={setEst} onClose={() => setEstOpen(false)} dueAt={dueAt({ dueDate: due.date, dueTime: due.time }, st.settings)} avgOverrunMin={avgOverrunMin(st.tasks)} />}
   </>;
   // phones: a composer pinned above the keyboard — the title, one row of chips, a send button
@@ -491,13 +515,14 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
             onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setOpen(false); }} />
           <button className="send" aria-label="Add task" disabled={!parsed.title.trim()} onPointerDown={e => e.preventDefault()} onClick={submit}><Icon name="arrowUp" /></button>
         </div>
-        {(parsed.date || parsed.estimate)
-          ? <div className="hint">Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(' and ')}.</div>
+        {(parsed.date || parsed.estimate || parsed.repeat)
+          ? <div className="hint">Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.repeat && repeatLabel(parsed.repeat).toLowerCase(), parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(', ')}.</div>
           : !title && <div className="hint">Tip: type “Write brief tomorrow 45m” to set the day and estimate.</div>}
         <div className="chips">
           {!projectId && <Chip emoji={project?.emoji} onClick={e => pa.open(e)}>{project?.name ?? 'Inbox'}</Chip>}
           <Chip icon="event" sel={!!effDate} onClick={e => da.open(e)}>{dueText}</Chip>
           <Chip icon="hourglass" sel={!!effEst} onClick={() => setEstOpen(true)}>{effEst ? fmtMin(effEst) : 'Estimate'}</Chip>
+          <Chip icon="repeat" sel={!!(parsed.repeat ?? rep)} onClick={e => rpa.open(e)}>{parsed.repeat ?? rep ? repeatLabel(parsed.repeat ?? rep, parsed.date ?? due.date) : 'Repeat'}</Chip>
           <Chip icon="bell" sel={!!remind} onClick={e => ra.open(e)}>{remind ? `${cap(relDay(isoDate(new Date(remind))))} ${fmtClock(remind)}` : 'Remind'}</Chip>
           {!inMyDay && <Chip icon={myDay ? 'sunFill' : 'sun'} sel={myDay} onClick={() => setMyDay(!myDay)}>My Day</Chip>}
         </div>
@@ -517,13 +542,14 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
         {!projectId && <Chip emoji={project?.emoji} onClick={e => pa.open(e)}>{project?.name ?? 'Inbox'}</Chip>}
         <Chip icon="event" sel={!!effDate} onClick={e => da.open(e)} onRemove={effDate && !parsed.date ? () => setDue({ date: null, time: null }) : undefined}>{dueText}</Chip>
         <Chip icon="hourglass" sel={!!effEst} onClick={() => setEstOpen(true)}>{effEst ? fmtMin(effEst) : 'Estimate'}</Chip>
+        <Chip icon="repeat" sel={!!(parsed.repeat ?? rep)} onClick={e => rpa.open(e)} onRemove={rep && !parsed.repeat ? () => setRep(null) : undefined}>{parsed.repeat ?? rep ? repeatLabel(parsed.repeat ?? rep, parsed.date ?? due.date) : 'Repeat'}</Chip>
         <Chip icon="bell" sel={!!remind} onClick={e => ra.open(e)}>{remind ? `${cap(relDay(isoDate(new Date(remind))))} ${fmtClock(remind)}` : 'Remind me'}</Chip>
         {!inMyDay && <Chip icon={myDay ? 'sunFill' : 'sun'} sel={myDay} onClick={() => setMyDay(!myDay)}>My Day</Chip>}
         <span className="grow" />
         <Btn kind="text" onClick={() => { reset(); setOpen(false); }}>Cancel</Btn>
         <Btn disabled={!parsed.title.trim()} onClick={submit}>Add</Btn>
       </div>
-      {(parsed.date || parsed.estimate) && <div className="t-bs c-muted" style={{ paddingLeft: 36 }}>Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(' and ')}.</div>}
+      {(parsed.date || parsed.estimate || parsed.repeat) && <div className="t-bs c-muted" style={{ paddingLeft: 36 }}>Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.repeat && repeatLabel(parsed.repeat).toLowerCase(), parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(', ')}.</div>}
       {pickers}
     </div>
   );
@@ -692,3 +718,80 @@ export function FilterChips({ value, onChange, shown, total }: { value: TaskFilt
 }
 
 export { DateTimePicker };
+
+// ---------- Repeat (drawer, composer) ----------
+const sameRule = (a: Repeat | null | undefined, b: Repeat | null) =>
+  !!a && !!b && a.freq === b.freq && (a.every || 1) === (b.every || 1) && [...(a.days ?? [])].sort().join() === [...(b.days ?? [])].sort().join();
+
+/** quick picks + Custom… (the rules people use most: daily, weekdays, weekends, one weekday, monthly) */
+export function RepeatPicker({ anchor, value, dueDate, onPick, onClose }: { anchor: HTMLElement | null; value: Repeat | null; dueDate: string | null; onPick: (r: Repeat | null) => void; onClose: () => void }) {
+  const [custom, setCustom] = useState(false);
+  const base = dueDate ?? todayISO();
+  const wd = weekdayOf(base);
+  const dom = parseDate(base).getDate();
+  const presets: { r: Repeat; sub?: string }[] = [
+    { r: { freq: 'day', every: 1 } },
+    { r: { freq: 'week', every: 1, days: [0, 1, 2, 3, 4] }, sub: 'Monday to Friday' },
+    { r: { freq: 'week', every: 1, days: [5, 6] }, sub: 'Saturday and Sunday' },
+    { r: { freq: 'week', every: 1, days: [wd] } },
+    ...(wd !== 6 ? [{ r: { freq: 'week' as const, every: 1, days: [6] } }] : []),
+    { r: { freq: 'month', every: 1 }, sub: `On the ${dom}${[1, 21, 31].includes(dom) ? 'st' : [2, 22].includes(dom) ? 'nd' : [3, 23].includes(dom) ? 'rd' : 'th'}` },
+  ];
+  if (custom) return <RepeatDialog value={value} dueDate={dueDate} onSave={r => { onPick(r); onClose(); }} onClose={onClose} />;
+  const isPreset = presets.some(p => sameRule(value, p.r));
+  return (
+    <Popover anchor={anchor} onClose={onClose}>
+      <MenuList width={280} onClose={onClose} items={[
+        { label: 'Repeat' },
+        { t: 'Doesn’t repeat', ic: 'close', sel: !value, onClick: () => onPick(null) },
+        ...presets.map(p => ({ t: p.r.freq === 'month' ? 'Monthly' : repeatLabel(p.r), sub: p.sub, ic: 'repeat' as const, sel: sameRule(value, p.r), onClick: () => onPick(p.r) })),
+        { divider: true },
+        { t: value && !isPreset ? `Custom · ${repeatLabel(value, dueDate)}` : 'Custom…', ic: 'tune', sel: !!value && !isPreset, keepOpen: true, onClick: () => setCustom(true) },
+        { note: 'When you finish a repeating task, the next one appears on its day. Skip one from the task’s menu.' },
+      ]} />
+    </Popover>
+  );
+}
+
+/** every N days / weeks (on these weekdays) / months, with a preview of the next dates */
+export function RepeatDialog({ value, dueDate, onSave, onClose }: { value: Repeat | null; dueDate: string | null; onSave: (r: Repeat) => void; onClose: () => void }) {
+  const today = todayISO();
+  const [freq, setFreq] = useState<Repeat['freq']>(value?.freq ?? 'week');
+  const [every, setEvery] = useState(value?.every ?? 1);
+  const [days, setDays] = useState<number[]>(value?.days?.length ? value.days : [weekdayOf(dueDate ?? today)]);
+  const r: Repeat = { freq, every, ...(freq === 'week' ? { days } : {}) };
+  const ok = freq !== 'week' || days.length > 0;
+  const preview: string[] = [];
+  if (ok) { let d = firstRepeatDate(r, dueDate && dueDate > today ? dueDate : today); for (let i = 0; i < 4; i++) { preview.push(d); d = nextRepeatDate(r, d); } }
+  const unit = { day: every === 1 ? 'day' : 'days', week: every === 1 ? 'week' : 'weeks', month: every === 1 ? 'month' : 'months' };
+  return (
+    <Dialog onClose={onClose} width={420} label="Custom repeat">
+      <div className="col gap-16">
+        <div className="row gap-8"><Icon name="repeat" style={{ color: 'var(--primary)' }} /><span className="t-tl grow">Repeat</span><IBtn icon="close" label="Close" onClick={onClose} /></div>
+        <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+          <span className="t-bl">Every</span>
+          <IBtn icon="remove" kind="outlined" label="Fewer" disabled={every <= 1} onClick={() => setEvery(Math.max(1, every - 1))} />
+          <span className="t-tl tnum" style={{ minWidth: 24, textAlign: 'center' }}>{every}</span>
+          <IBtn icon="add" kind="outlined" label="More" disabled={every >= 30} onClick={() => setEvery(Math.min(30, every + 1))} />
+          <Seg value={freq} onChange={setFreq} items={[{ value: 'day', label: unit.day }, { value: 'week', label: unit.week }, { value: 'month', label: unit.month }]} />
+        </div>
+        {freq === 'week' && (
+          <div className="col gap-8">
+            <span className="t-ll c-muted">On</span>
+            <div className="row gap-6 wd-row">
+              {WEEKDAY_SHORT.map((l, i) => (
+                <button key={i} className={cx('wd-btn state', days.includes(i) && 'on')} aria-pressed={days.includes(i)} aria-label={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]}
+                  onClick={() => setDays(days.includes(i) ? days.filter(x => x !== i) : [...days, i].sort())}>{l}</button>
+              ))}
+            </div>
+            <div className="row gap-6" style={{ flexWrap: 'wrap' }}>
+              <Chip onClick={() => setDays([0, 1, 2, 3, 4])}>Weekdays</Chip><Chip onClick={() => setDays([5, 6])}>Weekends</Chip><Chip onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])}>Every day</Chip>
+            </div>
+          </div>
+        )}
+        <div className="t-bm c-muted">{ok ? <>Next: {preview.map(d => cap(relDay(d))).join(', ')}…</> : 'Pick at least one day.'}</div>
+        <div className="dialog-actions"><span className="spacer" /><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!ok} onClick={() => onSave(r)}>Done</Btn></div>
+      </div>
+    </Dialog>
+  );
+}

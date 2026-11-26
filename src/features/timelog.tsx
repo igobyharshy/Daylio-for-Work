@@ -88,19 +88,21 @@ export function TimeLog({ t }: { t: Task }) {
             const head = d !== lastDay ? dayLabel(x.s) : null;
             lastDay = d;
             const nextDay = x.e && isoDate(new Date(x.e)) !== d;
-            if (edit && edit.i === i) return <Editor key={i} head={head} edit={edit} setEdit={setEdit} problem={problem(edit)} onSave={() => commit(edit)} />;
+            if (edit && edit.i === i) return <Editor key={i} head={head} edit={edit} setEdit={setEdit} problem={problem(edit)} onSave={() => commit(edit)}
+              onRemove={x.e ? () => { setEdit(null); remove(i); } : undefined} />;
+            const open = () => setEdit({ i, s: new Date(x.s), e: x.e ? new Date(x.e) : null });
             return (
               <div key={i} className="col">
                 {head && <span className="log-day t-ll">{head}</span>}
-                <div className={cx('log-row', !x.e && 'live')}>
+                <div className={cx('log-row state', !x.e && 'live')} role="button" tabIndex={0} aria-label={`Edit ${fmtClock(x.s)} to ${x.e ? fmtClock(x.e) : 'now'}`}
+                  data-tip="Click to edit" onClick={open} onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } }}>
                   <span className="in"><Icon name="punchIn" size={16} />{fmtClock(x.s)}</span>
                   <Icon name="forward" size={14} className="c-faint" />
                   <span className="out">
                     {x.e ? <><Icon name="punchOut" size={16} />{fmtClock(x.e)}{nextDay && <span className="plus-day" data-tip={fmtDayShort(x.e)}>+{Math.round((new Date(d0(x.e)).getTime() - new Date(d0(x.s)).getTime()) / 864e5)}d</span>}</> : <><span className="live-dot" />Running</>}
                   </span>
                   <span className="dur tnum">{fmtMin(Math.max(1, Math.round(ms(x, now) / MIN)))}</span>
-                  <span className="acts">
-                    <IBtn sm icon="edit" label="Edit this stretch" onClick={() => setEdit({ i, s: new Date(x.s), e: x.e ? new Date(x.e) : null })} />
+                  <span className="acts" onClick={ev => ev.stopPropagation()}>
                     <IBtn sm icon="trash" label={x.e ? 'Remove this stretch' : 'Pause the timer to remove it'} disabled={!x.e} onClick={() => remove(i)} />
                   </span>
                 </div>
@@ -123,7 +125,7 @@ export function TimeLog({ t }: { t: Task }) {
 }
 const d0 = (iso: string) => isoDate(new Date(iso));
 
-function Editor({ head, edit, setEdit, problem, onSave }: { head: string | null; edit: Edit; setEdit: (e: Edit | null) => void; problem: string | null; onSave: () => void }) {
+function Editor({ head, edit, setEdit, problem, onSave, onRemove }: { head: string | null; edit: Edit; setEdit: (e: Edit | null) => void; problem: string | null; onSave: () => void; onRemove?: () => void }) {
   const len = ((edit.e ? edit.e.getTime() : Date.now()) - edit.s.getTime()) / MIN;
   return (
     <div className="col log-edit">
@@ -135,7 +137,11 @@ function Editor({ head, edit, setEdit, problem, onSave }: { head: string | null;
         {edit.e ? <DayTimeInput value={edit.e} onChange={e => setEdit({ ...edit, e })} label="Clock out" maxDate={todayISO()} />
           : <span className="t-bm row gap-6"><span className="live-dot" />Still running</span>}
         <span className={cx('t-bs', problem ? 'c-error' : 'c-muted')}>{problem ?? `${fmtMin(Math.max(0, Math.round(len)))}${edit.e && isoDate(edit.e) !== isoDate(edit.s) ? ' · crosses midnight' : ''}`}</span>
-        <div className="row gap-8"><Btn kind="text" onClick={() => setEdit(null)}>Cancel</Btn><Btn disabled={!!problem} onClick={onSave}>Save</Btn></div>
+        <div className="row gap-8">
+          {onRemove && <IBtn icon="trash" label="Remove this stretch" onClick={onRemove} />}
+          <span className="grow" />
+          <Btn kind="text" onClick={() => setEdit(null)}>Cancel</Btn><Btn disabled={!!problem} onClick={onSave}>Save</Btn>
+        </div>
       </div>
     </div>
   );

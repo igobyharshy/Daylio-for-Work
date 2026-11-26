@@ -4,10 +4,10 @@ import { isMobileNow } from './native';
 import { supabase } from './supabase';
 import type { Entry, Notif, Project, Settings, Task, ID, TimeBlock, WorkSession } from './types';
 import { DEFAULT_SETTINGS } from './types';
-import { blockFromRow, blockToRow, checkinFromRow, checkinToRow, entryFromRow, entryToRow, notifFromRow, notifToRow, projectFromRow, projectToRow, taskFromRow, taskToRow } from './db';
+import { blockFromRow, blockToRow, checkinFromRow, checkinToRow, entryFromRow, entryToRow, notifFromRow, notifToRow, projectFromRow, projectToRow, taskFromRow, taskToRow, taskInsertRow } from './db';
 import type { Checkin, TrackerValues } from './trackers';
 import { buildSample } from './seed';
-import { elapsed, isoDate, outcome, todayISO, uid, workSessions, type Outcome } from './time';
+import { addDays, elapsed, isoDate, nextOccurrence, outcome, parseDate, todayISO, uid, workSessions, type Outcome } from './time';
 import { useToast } from '../ui/Toast';
 
 export interface StoreState {
@@ -35,6 +35,7 @@ export interface Store extends StoreState {
   pauseTask: (id: ID) => void;
   finishTask: (id: ID, finishedAt?: Date) => Outcome | null;
   reopenTask: (id: ID) => void;
+  skipOccurrence: (id: ID) => string | null;
   /** change the status label; leaving Done un-ticks a finished task. Never ticks. */
   setStatus: (id: ID, status: string) => void;
   /** remove locally now, delete on the server after the undo window; returns undo */
@@ -141,7 +142,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
       }
       const sample = buildSample(inbox.id);
       const r1 = await supabase.from('projects').insert(sample.projects.map(p => ({ ...projectToRow(p), user_id: userId })));
-      const r2 = r1.error ? r1 : await supabase.from('tasks').insert(sample.tasks.map(t => ({ ...taskToRow(t), user_id: userId })));
+      const r2 = r1.error ? r1 : await supabase.from('tasks').insert(sample.tasks.map(t => ({ ...taskInsertRow(t), user_id: userId })));
       const r3 = r2.error ? r2 : await supabase.from('journal_entries').insert(sample.entries.map(e => ({ ...entryToRow(e), user_id: userId })));
       const r4 = r3.error ? r3 : await supabase.from('daily_checkins').upsert(sample.checkins.map(c => ({ ...checkinToRow(c), user_id: userId })), { onConflict: 'user_id,day', ignoreDuplicates: true });
       if (r4.error) { fail(r4.error); }
@@ -226,10 +227,10 @@ export function StoreProvider({ session, children }: { session: Session; childre
       id: uid(), projectId: inbox?.id ?? null, title: '', status: s.settings.taskStatuses.find(x => x.note?.startsWith('Default'))?.name ?? 'Not started',
       dueDate: null, dueTime: null, estimateMin: null, reEstimates: [], myDayDate: null, remindAt: null, remindedAt: null,
       steps: [], note: '', elapsedMs: 0, runStartedAt: null, pausedAt: null, firstStartedAt: null, finishedAt: null, plannedStart: null, sessions: [], reflection: 'none',
-      snoozeUntil: null, sort: maxSort + 1, isSample: false, createdAt: new Date().toISOString(), ...t,
+      snoozeUntil: null, sort: maxSort + 1, isSample: false, createdAt: new Date().toISOString(), repeat: null, ...t,
     };
     setState(st => ({ ...st, tasks: [...st.tasks, task] }));
-    write(supabase.from('tasks').insert({ ...taskToRow(task), user_id: userId }));
+    write(supabase.from('tasks').insert({ ...taskInsertRow(task), user_id: userId }));
     return task;
   }, [write, userId]);
 
@@ -274,16 +275,56 @@ export function StoreProvider({ session, children }: { session: Session; childre
     const done: Task = { ...t, elapsedMs: ms, runStartedAt: null, finishedAt: finishedAt.toISOString(), status: 'Done' };
     const o = outcome(done, s.settings);
     const needs = t.reflection === 'none' && ((o.diffMin ?? 0) > 0 || (o.lateMin ?? 0) > 0);
+    // repeating task: the next one is created now (To Do style), so there's never a pile of missed copies
+    let repeat = t.repeat;
+    if (t.repeat && !t.isSample && !(t.repeat.nextId && s.tasks.some(x => x.id === t.repeat!.nextId))) {
+      const next = spawnNext(t);
+      repeat = { ...t.repeat, nextId: next.id };
+      o.next = next.dueDate;
+    }
     updateTask(id, { elapsedMs: ms, runStartedAt: null, pausedAt: null, finishedAt: done.finishedAt, status: 'Done', reflection: needs ? 'needed' : t.reflection,
-      ...(t.sessions.length ? { sessions: closeOpen(t.sessions, done.finishedAt!) } : {}) });
+      ...(t.sessions.length ? { sessions: closeOpen(t.sessions, done.finishedAt!) } : {}), ...(repeat !== t.repeat ? { repeat } : {}) });
     return o;
+  }, [updateTask]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** the next copy of a repeating task: same title, project, estimate, steps (unticked), note and time of day */
+  const spawnNext = (t: Task): Task => {
+    const r = t.repeat!;
+    const due = nextOccurrence(r, t.dueDate);
+    const shift = (iso: string | null) => {
+      if (!iso || !t.dueDate) return null;
+      const days = Math.round((parseDate(due).getTime() - parseDate(t.dueDate).getTime()) / 864e5);
+      return addDays(new Date(iso), days).toISOString();
+    };
+    return addTask({
+      title: t.title, projectId: t.projectId, dueDate: due, dueTime: t.dueTime, estimateMin: t.estimateMin,
+      steps: t.steps.map(x => ({ ...x, id: uid(), done: false })), note: t.note,
+      remindAt: t.remindAt ? shift(t.remindAt) : null,
+      // a repeating task that lived in My Day joins My Day again on its next day
+      myDayDate: t.myDayDate ? due : null,
+      repeat: { freq: r.freq, every: r.every, ...(r.days ? { days: r.days } : {}), nextId: null },
+      sort: t.sort + 0.5,
+    });
+  };
+
+  /** skip this one: move it to the next date the rule lands on */
+  const skipOccurrence = useCallback((id: ID) => {
+    const t = stateRef.current.tasks.find(x => x.id === id);
+    if (!t || !t.repeat) return null;
+    const due = nextOccurrence(t.repeat, t.dueDate);
+    updateTask(id, { dueDate: due, myDayDate: t.myDayDate ? due : null, plannedStart: null });
+    return due;
   }, [updateTask]);
 
   const reopenTask = useCallback((id: ID) => {
     const t = stateRef.current.tasks.find(x => x.id === id);
     if (!t) return;
-    updateTask(id, { finishedAt: null, status: t.elapsedMs > 0 ? 'In progress' : 'Not started', reflection: t.reflection === 'needed' ? 'none' : t.reflection });
-  }, [updateTask]);
+    updateTask(id, { finishedAt: null, status: t.elapsedMs > 0 ? 'In progress' : 'Not started', reflection: t.reflection === 'needed' ? 'none' : t.reflection,
+      ...(t.repeat?.nextId ? { repeat: { ...t.repeat, nextId: null } } : {}) });
+    // un-finishing takes back the copy it created, if nothing has happened to it yet
+    const n = t.repeat?.nextId ? stateRef.current.tasks.find(x => x.id === t.repeat!.nextId) : null;
+    if (n && !n.firstStartedAt && !n.finishedAt) deleteTask(n.id);
+  }, [updateTask, deleteTask]);
 
   const setStatus = useCallback((id: ID, status: string) => {
     const t = stateRef.current.tasks.find(x => x.id === id);
@@ -578,14 +619,14 @@ export function StoreProvider({ session, children }: { session: Session; childre
       inbox: state.projects.find(p => p.isInbox),
       projectById: id => (id ? pMap.get(id) : undefined),
       taskById: id => (id ? tMap.get(id) : undefined),
-      addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, setStatus, removeTask, removeEntry, removeProject,
+      addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, skipOccurrence, reEstimate, setFinishTime, setStatus, removeTask, removeEntry, removeProject,
       setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock,
       addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead,
       updateSettings, setDisplayName, clearSample, saveCheckin, skipCheckin,
       checkinFor: (day: string) => state.checkins.find(c => c.day === day),
       hasSample: state.projects.some(p => p.isSample) || state.tasks.some(t => t.isSample) || state.entries.some(e => e.isSample) || state.checkins.some(c => c.isSample),
     };
-  }, [state, setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
+  }, [state, setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, skipOccurrence, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

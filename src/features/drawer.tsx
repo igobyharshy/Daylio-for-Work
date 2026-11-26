@@ -6,14 +6,14 @@ import { Icon, type IconName } from '../ui/Icon';
 import { Btn, IBtn, MenuList, Pill, Popover, Switch, Tag, cx, useAnchor, PopOutBtn } from '../ui/kit';
 import { DuePicker, EstimateDialog } from '../ui/pickers';
 import { TimeLog } from './timelog';
-import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot, TaskMenu } from './tasks';
+import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot, TaskMenu, RepeatPicker } from './tasks';
 import { useIsMobile } from '../lib/native';
 import { statusTone, avgOverrunMin, tagChipTone } from '../lib/select';
 import { useMiniTimer } from './mini';
 import { useDragSort } from './dnd';
 import {
   atTime, cap, dueAt, dueLabel, fmtClock, fmtDayComma, fmtDayShort, fmtMin, hhmm, isDone, isOverEstimate, isOverdue,
-  isoDate, plannedRange, relDay, remainingMs, startBy, timerView, todayISO, totalEstimateMin, uid,
+  isoDate, plannedRange, relDay, remainingMs, startBy, timerView, todayISO, totalEstimateMin, uid, repeatLabel,
 } from '../lib/time';
 
 function Prop({ icon, k, children }: { icon: IconName; k: string; children: React.ReactNode }) {
@@ -36,6 +36,7 @@ export function TaskDrawer({ t }: { t: Task }) {
   const [note, setNote] = useState(t.note);
   const pla = useAnchor();
   const ma = useAnchor();
+  const rpa = useAnchor();
   const phone = useIsMobile();
   useEffect(() => { setTitle(t.title); setNote(t.note); }, [t.id]);
   useEffect(() => { if (document.activeElement?.getAttribute('aria-label') !== 'Task title') setTitle(t.title); }, [t.title]);
@@ -155,6 +156,11 @@ export function TaskDrawer({ t }: { t: Task }) {
               {sb && !done && sb.getTime() > now && <span className="t-bs c-muted" style={{ padding: '0 10px 6px' }}>Start by {relDay(isoDate(sb)) === 'today' ? '' : cap(relDay(isoDate(sb))) + ' '}{fmtClock(sb)}{!t.dueTime ? ' · based on the end of your work day' : ''}</span>}
             </div>
           </Prop>
+          <Prop icon="repeat" k="Repeat">
+            <button className={cx('val-btn state', !t.repeat && 'placeholder')} onClick={e => rpa.open(e)}>
+              {t.repeat ? repeatLabel(t.repeat, t.dueDate) : 'Doesn’t repeat'}<Icon name="edit" className="hover-only" />
+            </button>
+          </Prop>
           {(!done || t.plannedStart) && (
             <Prop icon="schedule" k="Planned">
               <button className={cx('val-btn state', !t.plannedStart && 'placeholder')} onClick={e => pla.open(e)} data-tip="When you plan to work on it. Shows on the Timeline.">
@@ -219,6 +225,7 @@ export function TaskDrawer({ t }: { t: Task }) {
             onDone={(d, tm) => { st.planTask(t.id, atTime(d, tm ?? '09:00')); pla.close(); }} onClear={() => { st.planTask(t.id, null); pla.close(); }} />
         </Popover>
       )}
+      {rpa.isOpen && <RepeatPicker anchor={rpa.el} value={t.repeat} dueDate={t.dueDate} onClose={rpa.close} onPick={r => act.setRepeat(t, r)} />}
       {ra.isOpen && <RemindPicker anchor={ra.el} onClose={ra.close} t={t} value={t.remindAt} onPick={iso => st.updateTask(t.id, { remindAt: iso, remindedAt: null })} />}
       {estOpen && <EstimateDialog editing={!!t.firstStartedAt && !!t.estimateMin} initial={t.estimateMin ? totalEstimateMin(t) : null} dueAt={dueAt(t, st.settings)} avgOverrunMin={avgOverrunMin(st.tasks)} onClose={() => setEstOpen(false)}
         onSet={min => {

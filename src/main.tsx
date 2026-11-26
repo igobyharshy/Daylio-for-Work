@@ -4,6 +4,7 @@ import '@fontsource/roboto/400.css';
 import '@fontsource/roboto/500.css';
 import '@fontsource/roboto/700.css';
 import './styles/tokens.css';
+import './styles/themes.css';
 import './styles/app.css';
 import './styles/mobile.css';
 import App from './App';

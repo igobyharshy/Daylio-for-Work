@@ -26,15 +26,18 @@ export const taskFromRow = (r: Row): Task => ({
   steps: r.steps ?? [], note: r.note ?? '', elapsedMs: Number(r.elapsed_ms ?? 0), runStartedAt: r.run_started_at, pausedAt: r.paused_at ?? null,
   firstStartedAt: r.first_started_at, finishedAt: r.finished_at, plannedStart: r.planned_start ?? null, sessions: Array.isArray(r.sessions) ? r.sessions : [],
   reflection: r.reflection, snoozeUntil: r.snooze_until,
-  sort: r.sort, isSample: r.is_sample, createdAt: r.created_at,
+  sort: r.sort, isSample: r.is_sample, createdAt: r.created_at, repeat: r.repeat ?? null,
 });
 export const taskToRow = (t: Partial<Task>): Row => strip({
   id: t.id, project_id: t.projectId, title: t.title, status: t.status, due_date: t.dueDate, due_time: t.dueTime,
   estimate_min: t.estimateMin, re_estimates: t.reEstimates, my_day_date: t.myDayDate, remind_at: t.remindAt,
   reminded_at: t.remindedAt, steps: t.steps, note: t.note, elapsed_ms: t.elapsedMs, run_started_at: t.runStartedAt, paused_at: t.pausedAt,
   first_started_at: t.firstStartedAt, finished_at: t.finishedAt, planned_start: t.plannedStart, sessions: t.sessions, reflection: t.reflection, snooze_until: t.snoozeUntil,
-  sort: t.sort, is_sample: t.isSample, created_at: t.createdAt,
+  sort: t.sort, is_sample: t.isSample, created_at: t.createdAt, repeat: t.repeat,
 });
+
+/** inserts leave out an empty repeat, so rows still save if a database hasn't got the column yet */
+export const taskInsertRow = (t: Partial<Task>): Row => { const r = taskToRow(t); if (r.repeat == null) delete r.repeat; return r; };
 
 export const entryFromRow = (r: Row): Entry => ({
   id: r.id, body: r.body, whenAt: r.when_at, tags: r.tags ?? [], taskIds: r.task_ids ?? [], trackerValues: r.tracker_values ?? {}, isSample: r.is_sample, createdAt: r.created_at,

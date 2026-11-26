@@ -7,6 +7,7 @@ import { Icon } from '../ui/Icon';
 import { Btn, Chip, IBtn, Popover, Tag, cx, useAnchor, type Placement } from '../ui/kit';
 import { myDayTasks, needsReflection, tagChipTone } from '../lib/select';
 import { TimerChip } from '../features/common';
+import { ACCENTS } from '../lib/accents';
 import { fmtClock, fmtDayShort, isDone, relDay, isoDate, cap } from '../lib/time';
 
 /** Apply the colour theme to <html data-theme>; 'system' follows the device. Mirrors to localStorage so the next load paints right away. */
@@ -16,7 +17,8 @@ export function useApplyTheme(theme: 'light' | 'dark' | 'system' = 'light') {
     const apply = () => {
       const eff = theme === 'system' ? (mq.matches ? 'dark' : 'light') : theme;
       document.documentElement.dataset.theme = eff;
-      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', eff === 'dark' ? '#141218' : '#fffbfe');
+      // the browser/OS bar matches the theme's surface
+      requestAnimationFrame(() => document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || (eff === 'dark' ? '#141218' : '#fffbfe')));
       try { localStorage.setItem('ontrack-theme', theme); } catch { /* private mode */ }
     };
     apply();
@@ -24,6 +26,37 @@ export function useApplyTheme(theme: 'light' | 'dark' | 'system' = 'light') {
     return () => mq.removeEventListener('change', apply);
   }, [theme]);
 }
+/** Apply the colour theme (<html data-accent>); purple is the baseline so it clears the attribute. */
+export function useApplyAccent(accent = 'purple') {
+  useEffect(() => {
+    if (!accent || accent === 'purple') delete document.documentElement.dataset.accent;
+    else document.documentElement.dataset.accent = accent;
+    try { localStorage.setItem('ontrack-accent', accent || 'purple'); } catch { /* private mode */ }
+    requestAnimationFrame(() => document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()));
+  }, [accent]);
+}
+
+/** 12 colour swatches; each shows the theme's accent on its own surface, in the current mode */
+export function AccentPicker({ big }: { big?: boolean }) {
+  const st = useStore();
+  const cur = st.settings.accent ?? 'purple';
+  const dark = effectiveTheme() === 'dark';
+  return (
+    <div className={cx('accent-grid', big && 'big')} role="radiogroup" aria-label="Colour theme">
+      {ACCENTS.map(a => {
+        const [pr, pc, sf] = dark ? a.dark : a.light;
+        return (
+          <button key={a.id} role="radio" aria-checked={cur === a.id} aria-label={a.label} data-tip={big ? undefined : a.label} className={cx('accent-sw state', cur === a.id && 'on')}
+            onClick={() => st.updateSettings({ accent: a.id })}>
+            <span className="sw" style={{ background: sf, borderColor: pc }}><i style={{ background: pr }} /><b style={{ background: pc }} />{cur === a.id && <Icon name="check" style={{ color: pr }} />}</span>
+            {big && <span className="t-bs">{a.label}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export const effectiveTheme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
 
 /** Left sidebar (replaces the old top bar): brand + bell + theme, search, pages, timer, profile. */
@@ -98,6 +131,8 @@ export function ProfileMenu({ anchor, onClose, placement }: { anchor: HTMLElemen
                 <button key={v} role="radio" aria-checked={theme === v} className={cx('state', theme === v && 'on')} onClick={() => st.updateSettings({ theme: v })}><Icon name={ic} />{l}</button>
               ))}
             </div>
+            <div className="menu-label">Colour</div>
+            <AccentPicker />
             <div className="divider" />
             <button role="menuitem" className="menu-item state" onClick={() => { onClose(); supabase.auth.signOut(); }}><Icon name="logout" />Sign out</button>
           </div>

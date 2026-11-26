@@ -6,7 +6,7 @@ import { StoreProvider, useStore } from './lib/store';
 import { ToastProvider } from './ui/Toast';
 import { TooltipLayer, cx } from './ui/kit';
 import { UIProvider, useUI } from './app/ui';
-import { SearchOverlay, Sidebar, useApplyTheme } from './app/shell';
+import { SearchOverlay, Sidebar, useApplyAccent, useApplyTheme } from './app/shell';
 import { BottomNav, MiniPlayer, MobileTopBar, NativeBridge } from './app/mobile';
 import { isNative, useIsMobile } from './lib/native';
 import { Engine } from './app/engine';
@@ -68,6 +68,7 @@ function Shell() {
   const mainRef = useRef<HTMLElement>(null);
   const mobile = useIsMobile();
   useApplyTheme(st.settings.theme ?? 'light');
+  useApplyAccent(st.settings.accent ?? 'purple');
   useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [loc.pathname]);
   // close the side sheets when the page changes
   useEffect(() => { ui.closeSheetsIfStale(); }, [loc.pathname]); // eslint-disable-line

@@ -52,10 +52,14 @@ export function MiniTimerProvider({ children }: { children: ReactNode }) {
   // keep the pop-out window on the same light/dark theme as the app
   useEffect(() => {
     if (!win) return;
-    const sync = () => { win.document.documentElement.dataset.theme = document.documentElement.dataset.theme ?? 'light'; };
+    const sync = () => {
+      win.document.documentElement.dataset.theme = document.documentElement.dataset.theme ?? 'light';
+      const a = document.documentElement.dataset.accent;
+      if (a) win.document.documentElement.dataset.accent = a; else delete win.document.documentElement.dataset.accent;
+    };
     sync();
     const mo = new MutationObserver(sync);
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-accent'] });
     return () => mo.disconnect();
   }, [win]);
   return (

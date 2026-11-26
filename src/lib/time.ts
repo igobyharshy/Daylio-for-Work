@@ -1,4 +1,4 @@
-import type { Task, Settings, WorkSession } from './types';
+import type { Task, Settings, WorkSession, Repeat } from './types';
 
 export const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -148,7 +148,7 @@ export function isOverdue(t: Task, s: Settings, now = Date.now()) {
   if (!t.dueTime) return startOfDay(new Date(now)).getTime() > parseDate(t.dueDate).getTime();
   return now > d.getTime();
 }
-export interface Outcome { tookMs: number; diffMin: number | null; earlyMin: number | null; lateMin: number | null }
+export interface Outcome { tookMs: number; diffMin: number | null; earlyMin: number | null; lateMin: number | null; /** repeating task: due date of the next one */ next?: string | null }
 export function outcome(t: Task, s: Settings): Outcome {
   const tookMs = elapsed(t);
   const diffMin = t.estimateMin ? Math.round(tookMs / 60000 - t.estimateMin) : null;
@@ -174,15 +174,27 @@ export function inWorkDay(s: Settings, now = new Date()) {
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
 
 /** Quick add: trailing "today / tomorrow / mon…sun" and "30m / 1h / 1h30 / 1h 30m" become chips. */
-export function parseQuickAdd(raw: string, now = new Date()): { title: string; date?: string; estimate?: number } {
+export function parseQuickAdd(raw: string, now = new Date()): { title: string; date?: string; estimate?: number; repeat?: Repeat } {
   let title = raw.trimEnd();
-  const out: { title: string; date?: string; estimate?: number } = { title };
+  const out: { title: string; date?: string; estimate?: number; repeat?: Repeat } = { title };
   const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
     const est = title.match(/\s(\d{1,2})h(?:\s?(\d{1,2})m?)?$|\s(\d{1,3})m(?:in)?$/i);
     if (est && out.estimate == null) {
       const min = est[3] ? Number(est[3]) : Number(est[1]) * 60 + Number(est[2] ?? 0);
       if (min > 0 && min <= 24 * 60) { out.estimate = min; title = title.slice(0, est.index).trimEnd(); continue; }
+    }
+    // "daily", "every day", "weekdays", "weekends", "every monday", "weekly", "monthly"
+    const rep = out.repeat ? null : title.match(/\s(daily|every\s?day|weekdays|every\s?weekday|weekends|every\s?weekend|weekly|monthly|every\s(mon|tue|wed|thu|fri|sat|sun)(?:day)?)$/i);
+    if (rep) {
+      const w = rep[1].toLowerCase().replace(/\s+/g, ' ');
+      if (/^(daily|every ?day)$/.test(w)) out.repeat = { freq: 'day', every: 1 };
+      else if (/weekday/.test(w)) out.repeat = { freq: 'week', every: 1, days: [0, 1, 2, 3, 4] };
+      else if (/weekend/.test(w)) out.repeat = { freq: 'week', every: 1, days: [5, 6] };
+      else if (w === 'weekly') out.repeat = { freq: 'week', every: 1, days: [weekdayOf(isoDate(now))] };
+      else if (w === 'monthly') out.repeat = { freq: 'month', every: 1 };
+      else if (rep[2]) out.repeat = { freq: 'week', every: 1, days: [(days.indexOf(rep[2].toLowerCase()) + 6) % 7] };
+      if (out.repeat) { title = title.slice(0, rep.index).trimEnd(); continue; }
     }
     const day = title.match(/\s(today|tomorrow|tmrw|mon|tue|wed|thu|fri|sat|sun)(?:day)?$/i);
     if (day && out.date == null) {
@@ -197,3 +209,55 @@ export function parseQuickAdd(raw: string, now = new Date()): { title: string; d
   out.title = title;
   return out;
 }
+
+// ---------- repeating tasks ----------
+/** 0 = Monday … 6 = Sunday */
+export const weekdayOf = (iso: string) => (parseDate(iso).getDay() + 6) % 7;
+const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const WD_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const mondayOf = (iso: string) => { const d = parseDate(iso); return addDays(d, -((d.getDay() + 6) % 7)).getTime(); };
+const ordinal = (n: number) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+
+/** first date after `fromISO` that the rule lands on (for "every N weeks", weeks count from `fromISO`'s week) */
+export function nextRepeatDate(r: Repeat, fromISO: string): string {
+  const every = Math.max(1, r.every || 1);
+  if (r.freq === 'day') return isoDate(addDays(parseDate(fromISO), every));
+  if (r.freq === 'month') {
+    const f = parseDate(fromISO), day = f.getDate();
+    const m = new Date(f.getFullYear(), f.getMonth() + every, 1);
+    const last = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+    return isoDate(new Date(m.getFullYear(), m.getMonth(), Math.min(day, last)));
+  }
+  const days = r.days?.length ? r.days : [weekdayOf(fromISO)];
+  const w0 = mondayOf(fromISO);
+  let d = addDays(parseDate(fromISO), 1);
+  for (let i = 0; i < 7 * every * 2 + 7; i++, d = addDays(d, 1)) {
+    const iso = isoDate(d);
+    const weeks = Math.round((mondayOf(iso) - w0) / (7 * 864e5));
+    if (weeks % every === 0 && days.includes(weekdayOf(iso))) return iso;
+  }
+  return isoDate(addDays(parseDate(fromISO), 7 * every));
+}
+/** `fromISO` itself if the rule lands on it, else the next date */
+export function firstRepeatDate(r: Repeat, fromISO: string): string {
+  if (r.freq === 'week' && r.days?.length && !r.days.includes(weekdayOf(fromISO))) return nextRepeatDate(r, fromISO);
+  return fromISO;
+}
+/** the next occurrence after a finished one: never in the past, so a late finish doesn't leave a backlog */
+export function nextOccurrence(r: Repeat, dueISO: string | null, today = todayISO()): string {
+  let d = nextRepeatDate(r, dueISO ?? today);
+  for (let i = 0; d < today && i < 400; i++) d = nextRepeatDate(r, d);
+  return d;
+}
+export function repeatLabel(r: Repeat | null | undefined, dueISO?: string | null): string {
+  if (!r) return 'Doesn’t repeat';
+  const n = Math.max(1, r.every || 1);
+  if (r.freq === 'day') return n === 1 ? 'Daily' : `Every ${n} days`;
+  if (r.freq === 'month') { const d = dueISO ? parseDate(dueISO).getDate() : null; return (n === 1 ? 'Monthly' : `Every ${n} months`) + (d ? ` on the ${ordinal(d)}` : ''); }
+  const days = [...(r.days ?? [])].sort();
+  const key = days.join('');
+  const base = key === '01234' ? 'Weekdays' : key === '56' ? 'Weekends' : key === '0123456' ? 'Every day' :
+    days.length === 1 ? `Every ${WD_LONG[days[0]]}` : days.length ? `Every ${days.map(x => WD[x]).join(', ')}` : 'Weekly';
+  return n === 1 ? base : `${base} · every ${n} weeks`;
+}
+export const WEEKDAY_SHORT = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];

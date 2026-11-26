@@ -29,6 +29,15 @@ export interface ReEstimate { at: string; addMin: number }
 
 export type Reflection = 'none' | 'needed' | 'done' | 'dismissed';
 
+/** Repeat rule (stored in tasks.repeat, jsonb). Finishing a repeating task creates the next one.
+ *  days: weekdays for weekly rules, 0 = Monday … 6 = Sunday. nextId: the occurrence this one created. */
+export interface Repeat {
+  freq: 'day' | 'week' | 'month';
+  every: number;
+  days?: number[];
+  nextId?: ID | null;
+}
+
 export interface Task {
   id: ID;
   projectId: ID | null;
@@ -58,6 +67,8 @@ export interface Task {
   sort: number;
   isSample: boolean;
   createdAt: string;
+  /** null = doesn't repeat */
+  repeat: Repeat | null;
 }
 
 export interface Entry {
@@ -144,6 +155,8 @@ export interface Settings {
   calendarTracker?: string | null;
   /** colour theme; 'system' follows the device */
   theme?: 'light' | 'dark' | 'system';
+  /** colour theme (src/lib/accents.ts); purple when unset */
+  accent?: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
