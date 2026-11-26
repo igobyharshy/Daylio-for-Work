@@ -100,7 +100,7 @@ export function Sidebar() {
           <span className="t-ts ellipsis grow">{name}</span>
           <Icon name="unfold" size={18} className="c-muted" />
         </button>
-        <IBtn sm icon="settings" label="Settings" kind={loc.pathname.startsWith('/settings') ? 'selected' : 'standard'} onClick={() => nav('/settings/work-day')} />
+        <IBtn sm icon="settings" label="Settings" kind={loc.pathname.startsWith('/settings') ? 'selected' : 'standard'} onClick={() => nav('/settings/appearance')} />
       </div>
       {ba.isOpen && <NotificationsPanel anchor={ba.el} onClose={ba.close} />}
       {pa.isOpen && <ProfileMenu anchor={pa.el} onClose={pa.close} placement="above-start" />}
@@ -124,7 +124,7 @@ export function ProfileMenu({ anchor, onClose, placement }: { anchor: HTMLElemen
               <span className="col" style={{ minWidth: 0 }}><span className="t-ts ellipsis">{name}</span><span className="t-bs c-muted ellipsis">{st.email}</span></span>
             </div>
             <div className="divider" />
-            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/work-day'); onClose(); }}><Icon name="settings" />Settings</button>
+            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/appearance'); onClose(); }}><Icon name="settings" />Settings</button>
             <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/account'); onClose(); }}><Icon name="person" />Account</button>
             <button role="menuitem" className="menu-item state" onClick={() => { replay(); nav('/my-day'); onClose(); }}><Icon name="help" />Intro & tips</button>
             <div className="divider" />

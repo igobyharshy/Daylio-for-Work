@@ -18,7 +18,7 @@ const TABS = [['appearance', 'Appearance'], ['work-day', 'Work day'], ['default-
 const CORE = ['Not started', 'In progress', 'Done'];
 
 export function SettingsPage() {
-  const { tab = 'work-day' } = useParams();
+  const { tab = 'appearance' } = useParams();
   const nav = useNavigate();
   return (
     <>

@@ -20,6 +20,7 @@ import { PasswordDialog, SettingsPage } from './features/settings';
 import { TaskDrawer } from './features/drawer';
 import { MiniTimerProvider } from './features/mini';
 import { OnboardingGate } from './features/onboarding';
+import { useAutoUpdate } from './app/update';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -73,6 +74,7 @@ function Shell() {
   const mobile = useIsMobile();
   useApplyTheme(st.settings.theme ?? 'light');
   useApplyAccent(st.settings.accent ?? 'purple');
+  useAutoUpdate();
   useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [loc.pathname]);
   // close the side sheets when the page changes
   useEffect(() => { ui.closeSheetsIfStale(); }, [loc.pathname]); // eslint-disable-line
@@ -94,7 +96,7 @@ function Shell() {
               <Route path="/journal" element={<JournalPage />} />
               <Route path="/journal/review" element={<ReviewPage />} />
               <Route path="/insights" element={<InsightsPage />} />
-              <Route path="/settings" element={<Navigate to="/settings/work-day" replace />} />
+              <Route path="/settings" element={<Navigate to="/settings/appearance" replace />} />
               <Route path="/settings/:tab" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/my-day" replace />} />
             </Routes>
