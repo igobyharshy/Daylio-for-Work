@@ -47,8 +47,7 @@ jobs:
           java-version: 21
           cache: gradle
 
-      - uses: android-actions/setup-android@v3
-
+      # GitHub's Ubuntu runners already ship the Android SDK (ANDROID_HOME); Gradle fetches anything missing.
       - name: Install
         run: npm ci
 
