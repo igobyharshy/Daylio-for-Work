@@ -31,6 +31,23 @@ for (const phone of [false, true]) {
   await page.screenshot({ path: out + `r-${tag}-4-custom.png` });
   await click('.dialog .btn:has-text("Done")'); await page.waitForTimeout(300);
   await page.screenshot({ path: out + `r-${tag}-5-drawer.png` });
+  // monthly: tap Monthly, pick the 15th on the day calendar
+  await click('.sheet .prop-row:has-text("Repeat") button');
+  await page.screenshot({ path: out + `r-${tag}-5b-picker-again.png` });
+  await click('.menu-item:has-text("Monthly")'); await page.waitForSelector('.md-grid');
+  await click('.md-btn:text-is("15")'); await page.waitForTimeout(200);
+  await page.screenshot({ path: out + `r-${tag}-5c-monthly.png` });
+  await click('.dialog .btn:has-text("Done")'); await page.waitForTimeout(300);
+  const rep1 = await page.locator('.sheet .prop-row:has-text("Repeat")').innerText();
+  if (!/Monthly on the 15th/.test(rep1)) errs.push('monthly label: ' + rep1);
+  // custom: every 3 months on the last day
+  await click('.sheet .prop-row:has-text("Repeat") button'); await click('.menu-item:has-text("Custom")'); await page.waitForTimeout(300);
+  await click('.dialog [aria-label="More"]'); await click('.dialog [aria-label="More"]');
+  await page.waitForSelector('.md-grid'); await click('.md-last');
+  await page.screenshot({ path: out + `r-${tag}-5d-custom-months.png` });
+  await click('.dialog .btn:has-text("Done")'); await page.waitForTimeout(300);
+  const rep2 = await page.locator('.sheet .prop-row:has-text("Repeat")').innerText();
+  if (!/Every 3 months on the last day/.test(rep2)) errs.push('custom months label: ' + rep2);
   // set back to daily, then finish it
   await click('.sheet .prop-row:has-text("Repeat") button'); await click('.menu-item:has-text("Daily")'); await page.waitForTimeout(300);
   await click('.sheet .title-row .check'); await page.waitForTimeout(600);

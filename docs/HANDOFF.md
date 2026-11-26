@@ -178,6 +178,10 @@ Phone layout below 720 px (bottom nav, mini player, focus timer, bottom sheets) 
   (`settings.accent`, `<html data-accent>`). Pink "over estimate" and red "late" keep their meaning in every theme.
 - Repeating tasks: `tasks.repeat` jsonb (migration `20261126160000_repeating_tasks.sql`). Finishing creates the next one;
   helpers in time.ts (`nextOccurrence`, `repeatLabel`); UI `RepeatPicker` in tasks.tsx.
+  Picker (Harshy, 26 Nov): Doesn't repeat · Daily · Weekdays · Weekends · Monthly (opens a day-of-month grid, 1–31 + Last day) ·
+  Custom (every N days/weeks/months; weekday buttons or the same day grid). No single-weekday presets: use Custom.
+  Monthly rules store `monthDay` (1–31, -1 = last day) in the jsonb; older rules without it get pinned from the due date
+  (`pinRepeat`) so the 31st no longer drifts to the 28th.
 - Sign-up + onboarding for new people: docs/onboarding.md. Existing users are auto-marked done.
 - Phone: swipe right = done, left = tomorrow; long-press = menu / drag. Desktop: press N to add a task; Esc closes the side sheet.
 

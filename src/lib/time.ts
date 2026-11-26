@@ -218,15 +218,22 @@ const WD_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturd
 const mondayOf = (iso: string) => { const d = parseDate(iso); return addDays(d, -((d.getDay() + 6) % 7)).getTime(); };
 const ordinal = (n: number) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
 
+/** the date in month (y, m) that a monthly rule lands on: its day, or the month's last day if shorter */
+const monthTarget = (y: number, m: number, monthDay: number) => {
+  const last = new Date(y, m + 1, 0).getDate();
+  return new Date(y, m, monthDay === -1 ? last : Math.min(monthDay, last));
+};
 /** first date after `fromISO` that the rule lands on (for "every N weeks", weeks count from `fromISO`'s week) */
 export function nextRepeatDate(r: Repeat, fromISO: string): string {
   const every = Math.max(1, r.every || 1);
   if (r.freq === 'day') return isoDate(addDays(parseDate(fromISO), every));
   if (r.freq === 'month') {
-    const f = parseDate(fromISO), day = f.getDate();
-    const m = new Date(f.getFullYear(), f.getMonth() + every, 1);
-    const last = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
-    return isoDate(new Date(m.getFullYear(), m.getMonth(), Math.min(day, last)));
+    const f = parseDate(fromISO);
+    const md = r.monthDay ?? f.getDate();
+    // still ahead this month (e.g. due was moved earlier by hand): that's the next one
+    const here = monthTarget(f.getFullYear(), f.getMonth(), md);
+    if (r.monthDay != null && here > f) return isoDate(here);
+    return isoDate(monthTarget(f.getFullYear(), f.getMonth() + every, md));
   }
   const days = r.days?.length ? r.days : [weekdayOf(fromISO)];
   const w0 = mondayOf(fromISO);
@@ -241,19 +248,32 @@ export function nextRepeatDate(r: Repeat, fromISO: string): string {
 /** `fromISO` itself if the rule lands on it, else the next date */
 export function firstRepeatDate(r: Repeat, fromISO: string): string {
   if (r.freq === 'week' && r.days?.length && !r.days.includes(weekdayOf(fromISO))) return nextRepeatDate(r, fromISO);
+  if (r.freq === 'month' && r.monthDay != null) {
+    const f = parseDate(fromISO);
+    const here = monthTarget(f.getFullYear(), f.getMonth(), r.monthDay);
+    if (here >= f) return isoDate(here);
+    return isoDate(monthTarget(f.getFullYear(), f.getMonth() + 1, r.monthDay));
+  }
   return fromISO;
+}
+/** a monthly rule remembers its day, so the 31st doesn't slide to the 28th after February */
+export function pinRepeat(r: Repeat, dueISO: string | null): Repeat {
+  if (r.freq !== 'month' || r.monthDay != null) return r;
+  return { ...r, monthDay: parseDate(dueISO ?? todayISO()).getDate() };
 }
 /** the next occurrence after a finished one: never in the past, so a late finish doesn't leave a backlog */
 export function nextOccurrence(r: Repeat, dueISO: string | null, today = todayISO()): string {
+  r = pinRepeat(r, dueISO);
   let d = nextRepeatDate(r, dueISO ?? today);
   for (let i = 0; d < today && i < 400; i++) d = nextRepeatDate(r, d);
   return d;
 }
+export const monthDayLabel = (md: number) => (md === -1 ? 'the last day' : `the ${ordinal(md)}`);
 export function repeatLabel(r: Repeat | null | undefined, dueISO?: string | null): string {
   if (!r) return 'Doesn’t repeat';
   const n = Math.max(1, r.every || 1);
   if (r.freq === 'day') return n === 1 ? 'Daily' : `Every ${n} days`;
-  if (r.freq === 'month') { const d = dueISO ? parseDate(dueISO).getDate() : null; return (n === 1 ? 'Monthly' : `Every ${n} months`) + (d ? ` on the ${ordinal(d)}` : ''); }
+  if (r.freq === 'month') { const d = r.monthDay ?? (dueISO ? parseDate(dueISO).getDate() : null); return (n === 1 ? 'Monthly' : `Every ${n} months`) + (d != null ? ` on ${monthDayLabel(d)}` : ''); }
   const days = [...(r.days ?? [])].sort();
   const key = days.join('');
   const base = key === '01234' ? 'Weekdays' : key === '56' ? 'Weekends' : key === '0123456' ? 'Every day' :

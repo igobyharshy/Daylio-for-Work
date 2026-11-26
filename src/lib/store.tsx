@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from './types';
 import { blockFromRow, blockToRow, checkinFromRow, checkinToRow, entryFromRow, entryToRow, notifFromRow, notifToRow, projectFromRow, projectToRow, taskFromRow, taskToRow, taskInsertRow } from './db';
 import type { Checkin, TrackerValues } from './trackers';
 import { buildSample } from './seed';
-import { addDays, elapsed, isoDate, nextOccurrence, outcome, parseDate, todayISO, uid, workSessions, type Outcome } from './time';
+import { addDays, elapsed, isoDate, nextOccurrence, outcome, parseDate, pinRepeat, todayISO, uid, workSessions, type Outcome } from './time';
 import { useToast } from '../ui/Toast';
 
 export interface StoreState {
@@ -290,7 +290,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
 
   /** the next copy of a repeating task: same title, project, estimate, steps (unticked), note and time of day */
   const spawnNext = (t: Task): Task => {
-    const r = t.repeat!;
+    const r = pinRepeat(t.repeat!, t.dueDate);
     const due = nextOccurrence(r, t.dueDate);
     const shift = (iso: string | null) => {
       if (!iso || !t.dueDate) return null;
@@ -303,7 +303,7 @@ export function StoreProvider({ session, children }: { session: Session; childre
       remindAt: t.remindAt ? shift(t.remindAt) : null,
       // a repeating task that lived in My Day joins My Day again on its next day
       myDayDate: t.myDayDate ? due : null,
-      repeat: { freq: r.freq, every: r.every, ...(r.days ? { days: r.days } : {}), nextId: null },
+      repeat: { freq: r.freq, every: r.every, ...(r.days ? { days: r.days } : {}), ...(r.monthDay != null ? { monthDay: r.monthDay } : {}), nextId: null },
       sort: t.sort + 0.5,
     });
   };

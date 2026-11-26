@@ -702,3 +702,11 @@ button.entry-card:hover { border-color: var(--outline-variant); }
 .pw-bars > i.on.s1 { background: var(--warning); }
 .pw-bars > i.on.s2 { background: var(--primary); opacity: 0.7; }
 .pw-bars > i.on.s3 { background: var(--primary); }
+
+/* monthly repeat: day-of-month calendar */
+.md-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.md-btn { height: 40px; border-radius: 20px; border: 0; background: transparent; color: var(--on-surface); font: inherit; font-size: 14px; cursor: pointer; }
+.md-btn.on { background: var(--primary); color: var(--on-primary); font-weight: 500; }
+.md-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.md-last { grid-column: span 4; border: 1px solid var(--outline-variant); }
+.md-last.on { border-color: var(--primary); }

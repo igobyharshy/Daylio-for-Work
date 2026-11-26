@@ -35,6 +35,8 @@ export interface Repeat {
   freq: 'day' | 'week' | 'month';
   every: number;
   days?: number[];
+  /** monthly: day of the month (1–31, or -1 = last day). Older rules without it use the due date's day */
+  monthDay?: number;
   nextId?: ID | null;
 }
 

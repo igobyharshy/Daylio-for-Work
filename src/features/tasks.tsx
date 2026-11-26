@@ -8,7 +8,7 @@ import { DuePicker, EstimateDialog, DateTimePicker, remindOptions } from '../ui/
 import { useToast } from '../ui/Toast';
 import {
   addDays, dueAt, dueLabel, elapsed, fmtClock, fmtMin, fmtMs, fmtTimer, isDone, isOverEstimate, isOverdue, outcome, relDay, remainingMs, timerView,
-  todayISO, totalEstimateMin, cap, isoDate, atTime, parseQuickAdd, repeatLabel, firstRepeatDate, nextRepeatDate, weekdayOf, WEEKDAY_SHORT, parseDate,
+  todayISO, totalEstimateMin, cap, isoDate, atTime, parseQuickAdd, repeatLabel, firstRepeatDate, nextRepeatDate, weekdayOf, WEEKDAY_SHORT, parseDate, pinRepeat, monthDayLabel,
 } from '../lib/time';
 import { avgOverrunMin, sortBetween, statusGroups } from '../lib/select';
 import { Ring } from '../ui/kit';
@@ -115,7 +115,7 @@ export function useTaskActions() {
     const today = todayISO();
     const from = t.dueDate && t.dueDate > today ? t.dueDate : today;
     const due = firstRepeatDate(r, from);
-    st.updateTask(t.id, { repeat: { ...r, nextId: null }, dueDate: due, ...(t.myDayDate && due > today ? { myDayDate: due } : {}) });
+    st.updateTask(t.id, { repeat: { ...pinRepeat(r, due), nextId: null }, dueDate: due, ...(t.myDayDate && due > today ? { myDayDate: due } : {}) });
   };
   return { finish, start, toggleDone, toggleMyDay, tomorrow, remove, setStatus, inMyDay, skip, setRepeat, pause: (t: Task) => st.pauseTask(t.id) };
 }
@@ -542,7 +542,7 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
     if (repeat) date = firstRepeatDate(repeat, date && date > todayISO() ? date : todayISO());
     const addToMyDay = myDay && (!date || date <= todayISO());
     const t = st.addTask({ title: name, projectId: proj ?? st.inbox?.id ?? null, dueDate: date, dueTime: parsed.date ? null : due.time, estimateMin: parsed.estimate ?? est, remindAt: remind,
-      myDayDate: addToMyDay ? todayISO() : repeat && myDay && date ? date : null, ...(repeat ? { repeat: { ...repeat, nextId: null } } : {}) });
+      myDayDate: addToMyDay ? todayISO() : repeat && myDay && date ? date : null, ...(repeat ? { repeat: { ...pinRepeat(repeat, date), nextId: null } } : {}) });
     flashTask(t.id);
     const where = addToMyDay && !projectId ? 'My Day' : project?.name ?? 'Inbox';
     toast.show(`Added to ${where}${addToMyDay && projectId ? ' and My Day' : ''}`, { icon: 'checkCircle', action: { label: 'Open', onClick: () => ui.openTask(t.id) }, duration: 4000 });
@@ -783,59 +783,76 @@ export { DateTimePicker };
 // ---------- Repeat (drawer, composer) ----------
 const sameRule = (a: Repeat | null | undefined, b: Repeat | null) =>
   !!a && !!b && a.freq === b.freq && (a.every || 1) === (b.every || 1) && [...(a.days ?? [])].sort().join() === [...(b.days ?? [])].sort().join();
+const isMonthly = (r: Repeat | null | undefined) => !!r && r.freq === 'month' && (r.every || 1) === 1;
 
-/** quick picks + Custom… (the rules people use most: daily, weekdays, weekends, one weekday, monthly) */
+/** the four rules people actually use, plus Custom… (any weekdays, every N days/weeks/months) */
 export function RepeatPicker({ anchor, value, dueDate, onPick, onClose }: { anchor: HTMLElement | null; value: Repeat | null; dueDate: string | null; onPick: (r: Repeat | null) => void; onClose: () => void }) {
-  const [custom, setCustom] = useState(false);
-  const base = dueDate ?? todayISO();
-  const wd = weekdayOf(base);
-  const dom = parseDate(base).getDate();
-  const presets: { r: Repeat; sub?: string }[] = [
-    { r: { freq: 'day', every: 1 } },
+  const [dialog, setDialog] = useState<null | 'monthly' | 'custom'>(null);
+  const presets: { r: Repeat; sub: string }[] = [
+    { r: { freq: 'day', every: 1 }, sub: 'Every day' },
     { r: { freq: 'week', every: 1, days: [0, 1, 2, 3, 4] }, sub: 'Monday to Friday' },
     { r: { freq: 'week', every: 1, days: [5, 6] }, sub: 'Saturday and Sunday' },
-    { r: { freq: 'week', every: 1, days: [wd] } },
-    ...(wd !== 6 ? [{ r: { freq: 'week' as const, every: 1, days: [6] } }] : []),
-    { r: { freq: 'month', every: 1 }, sub: `On the ${dom}${[1, 21, 31].includes(dom) ? 'st' : [2, 22].includes(dom) ? 'nd' : [3, 23].includes(dom) ? 'rd' : 'th'}` },
   ];
-  if (custom) return <RepeatDialog value={value} dueDate={dueDate} onSave={r => { onPick(r); onClose(); }} onClose={onClose} />;
-  const isPreset = presets.some(p => sameRule(value, p.r));
+  if (dialog) return <RepeatDialog mode={dialog} value={value} dueDate={dueDate} onSave={r => { onPick(r); onClose(); }} onClose={onClose} />;
+  const isPreset = presets.some(p => sameRule(value, p.r)) || isMonthly(value);
+  const monthSub = isMonthly(value) ? `On ${monthDayLabel(value!.monthDay ?? parseDate(dueDate ?? todayISO()).getDate())}` : 'Pick the day of the month';
   return (
     <Popover anchor={anchor} onClose={onClose}>
       <MenuList width={280} onClose={onClose} items={[
         { label: 'Repeat' },
         { t: 'Doesn’t repeat', ic: 'close', sel: !value, onClick: () => onPick(null) },
-        ...presets.map(p => ({ t: p.r.freq === 'month' ? 'Monthly' : repeatLabel(p.r), sub: p.sub, ic: 'repeat' as const, sel: sameRule(value, p.r), onClick: () => onPick(p.r) })),
+        ...presets.map(p => ({ t: repeatLabel(p.r), sub: p.sub, ic: 'repeat' as const, sel: sameRule(value, p.r), onClick: () => onPick(p.r) })),
+        { t: 'Monthly', sub: monthSub, ic: 'calendar', sel: isMonthly(value), keepOpen: true, onClick: () => setDialog('monthly') },
         { divider: true },
-        { t: value && !isPreset ? `Custom · ${repeatLabel(value, dueDate)}` : 'Custom…', ic: 'tune', sel: !!value && !isPreset, keepOpen: true, onClick: () => setCustom(true) },
+        { t: value && !isPreset ? `Custom · ${repeatLabel(value, dueDate)}` : 'Custom…', sub: value && !isPreset ? undefined : 'Pick days, or every 2 weeks, 3 months…', ic: 'tune', sel: !!value && !isPreset, keepOpen: true, onClick: () => setDialog('custom') },
         { note: 'When you finish a repeating task, the next one appears on its day. Skip one from the task’s menu.' },
       ]} />
     </Popover>
   );
 }
 
-/** every N days / weeks (on these weekdays) / months, with a preview of the next dates */
-export function RepeatDialog({ value, dueDate, onSave, onClose }: { value: Repeat | null; dueDate: string | null; onSave: (r: Repeat) => void; onClose: () => void }) {
+/** a month at a glance: tap the day it should land on */
+function MonthDayGrid({ value, onChange }: { value: number; onChange: (d: number) => void }) {
+  return (
+    <div className="col gap-8">
+      <div className="md-grid" role="radiogroup" aria-label="Day of the month">
+        {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+          <button key={d} type="button" role="radio" aria-checked={value === d} className={cx('md-btn state tnum', value === d && 'on')} onClick={() => onChange(d)}>{d}</button>
+        ))}
+        <button type="button" role="radio" aria-checked={value === -1} className={cx('md-btn md-last state', value === -1 && 'on')} onClick={() => onChange(-1)}>Last day</button>
+      </div>
+      {value >= 29 && <span className="t-bs c-muted">In shorter months it lands on the last day.</span>}
+    </div>
+  );
+}
+
+/** Monthly: which day. Custom: every N days / weeks (on these weekdays) / months (on this day). Both preview the next dates. */
+export function RepeatDialog({ mode = 'custom', value, dueDate, onSave, onClose }: { mode?: 'monthly' | 'custom'; value: Repeat | null; dueDate: string | null; onSave: (r: Repeat) => void; onClose: () => void }) {
   const today = todayISO();
-  const [freq, setFreq] = useState<Repeat['freq']>(value?.freq ?? 'week');
-  const [every, setEvery] = useState(value?.every ?? 1);
-  const [days, setDays] = useState<number[]>(value?.days?.length ? value.days : [weekdayOf(dueDate ?? today)]);
-  const r: Repeat = { freq, every, ...(freq === 'week' ? { days } : {}) };
+  const base = dueDate && dueDate > today ? dueDate : today;
+  const [freq, setFreq] = useState<Repeat['freq']>(mode === 'monthly' ? 'month' : value?.freq ?? 'week');
+  const [every, setEvery] = useState(mode === 'monthly' ? 1 : value?.every ?? 1);
+  const [days, setDays] = useState<number[]>(value?.days?.length ? value.days : [weekdayOf(base)]);
+  const [monthDay, setMonthDay] = useState<number>(value?.freq === 'month' ? value.monthDay ?? parseDate(dueDate ?? today).getDate() : parseDate(base).getDate());
+  const r: Repeat = { freq, every, ...(freq === 'week' ? { days } : {}), ...(freq === 'month' ? { monthDay } : {}) };
   const ok = freq !== 'week' || days.length > 0;
   const preview: string[] = [];
-  if (ok) { let d = firstRepeatDate(r, dueDate && dueDate > today ? dueDate : today); for (let i = 0; i < 4; i++) { preview.push(d); d = nextRepeatDate(r, d); } }
+  if (ok) { let d = firstRepeatDate(r, base); for (let i = 0; i < (freq === 'month' ? 3 : 4); i++) { preview.push(d); d = nextRepeatDate(r, d); } }
+  const fmt = (d: string) => (freq === 'month' && d > isoDate(addDays(parseDate(today), 6)) ? parseDate(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : cap(relDay(d)));
   const unit = { day: every === 1 ? 'day' : 'days', week: every === 1 ? 'week' : 'weeks', month: every === 1 ? 'month' : 'months' };
   return (
-    <Dialog onClose={onClose} width={420} label="Custom repeat">
+    <Dialog onClose={onClose} width={420} label={mode === 'monthly' ? 'Repeat monthly' : 'Custom repeat'}>
       <div className="col gap-16">
-        <div className="row gap-8"><Icon name="repeat" style={{ color: 'var(--primary)' }} /><span className="t-tl grow">Repeat</span><IBtn icon="close" label="Close" onClick={onClose} /></div>
-        <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
-          <span className="t-bl">Every</span>
-          <IBtn icon="remove" kind="outlined" label="Fewer" disabled={every <= 1} onClick={() => setEvery(Math.max(1, every - 1))} />
-          <span className="t-tl tnum" style={{ minWidth: 24, textAlign: 'center' }}>{every}</span>
-          <IBtn icon="add" kind="outlined" label="More" disabled={every >= 30} onClick={() => setEvery(Math.min(30, every + 1))} />
-          <Seg value={freq} onChange={setFreq} items={[{ value: 'day', label: unit.day }, { value: 'week', label: unit.week }, { value: 'month', label: unit.month }]} />
-        </div>
+        <div className="row gap-8"><Icon name="repeat" style={{ color: 'var(--primary)' }} /><span className="t-tl grow">{mode === 'monthly' ? 'Repeat monthly' : 'Custom repeat'}</span><IBtn icon="close" label="Close" onClick={onClose} /></div>
+        {mode === 'custom' && (
+          <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+            <span className="t-bl">Every</span>
+            <IBtn icon="remove" kind="outlined" label="Fewer" disabled={every <= 1} onClick={() => setEvery(Math.max(1, every - 1))} />
+            <span className="t-tl tnum" style={{ minWidth: 24, textAlign: 'center' }}>{every}</span>
+            <IBtn icon="add" kind="outlined" label="More" disabled={every >= 30} onClick={() => setEvery(Math.min(30, every + 1))} />
+            <Seg value={freq} onChange={setFreq} items={[{ value: 'day', label: unit.day }, { value: 'week', label: unit.week }, { value: 'month', label: unit.month }]} />
+          </div>
+        )}
         {freq === 'week' && (
           <div className="col gap-8">
             <span className="t-ll c-muted">On</span>
@@ -845,12 +862,15 @@ export function RepeatDialog({ value, dueDate, onSave, onClose }: { value: Repea
                   onClick={() => setDays(days.includes(i) ? days.filter(x => x !== i) : [...days, i].sort())}>{l}</button>
               ))}
             </div>
-            <div className="row gap-6" style={{ flexWrap: 'wrap' }}>
-              <Chip onClick={() => setDays([0, 1, 2, 3, 4])}>Weekdays</Chip><Chip onClick={() => setDays([5, 6])}>Weekends</Chip><Chip onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])}>Every day</Chip>
-            </div>
           </div>
         )}
-        <div className="t-bm c-muted">{ok ? <>Next: {preview.map(d => cap(relDay(d))).join(', ')}…</> : 'Pick at least one day.'}</div>
+        {freq === 'month' && (
+          <div className="col gap-8">
+            <span className="t-ll c-muted">On day</span>
+            <MonthDayGrid value={monthDay} onChange={setMonthDay} />
+          </div>
+        )}
+        <div className="t-bm c-muted">{ok ? <>Next: {preview.map(fmt).join(', ')}…</> : 'Pick at least one day.'}</div>
         <div className="dialog-actions"><span className="spacer" /><Btn kind="text" onClick={onClose}>Cancel</Btn><Btn disabled={!ok} onClick={() => onSave(r)}>Done</Btn></div>
       </div>
     </Dialog>
