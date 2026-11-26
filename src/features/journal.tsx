@@ -15,6 +15,7 @@ import {
 } from '../lib/time';
 import { SampleBanner } from './common';
 import { useIsMobile } from '../lib/native';
+import { useCloseOnEsc } from './drawer';
 
 // ---------- shared bits ----------
 export function TagAdder({ value, onChange }: { value: string[]; onChange: (tags: string[]) => void }) {
@@ -204,6 +205,7 @@ export function DayPanel() {
   const toast = useToast();
   const d = ui.day!;
   const iso = d.iso;
+  useCloseOnEsc(() => ui.openDay(null));
   const today = todayISO();
   const entries = st.entries.filter(e => isoDate(new Date(e.whenAt)) === iso).sort((a, b) => a.whenAt.localeCompare(b.whenAt));
   const trackers = checkinTrackers(st.settings.trackers);

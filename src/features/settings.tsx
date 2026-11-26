@@ -7,6 +7,7 @@ import { Icon, type IconName } from '../ui/Icon';
 import { Btn, Chip, Confirm, Dialog, Field, IBtn, MenuList, Pill, Popover, Switch, TONES, TONE_LIST, Tag, cx, useAnchor } from '../ui/kit';
 import { TimeInput } from '../ui/pickers';
 import { AccentPicker } from '../app/shell';
+import { useReplayIntro } from './onboarding';
 import { useToast } from '../ui/Toast';
 import { tagChipTone, tagDot } from '../lib/select';
 import { isMobileNow, isNative, useNotifPermission } from '../lib/native';
@@ -290,6 +291,8 @@ function Notifications() {
 }
 
 function Account() {
+  const replay = useReplayIntro();
+  const nav = useNavigate();
   const st = useStore();
   const toast = useToast();
   const [name, setName] = useState(st.displayName);
@@ -323,6 +326,9 @@ function Account() {
           <Row label="Export everything" sub="Projects, tasks and journal as a JSON file"><Btn kind="tonal" icon="download" onClick={exportAll}>Export</Btn></Row>
           {st.hasSample && <Row label="Clear sample data" sub="Removes the example projects, tasks and journal entries. Your own stay."><Btn kind="outlined" icon="trash" onClick={() => setClear(true)}>Clear</Btn></Row>}
         </Card>
+        <Card title="Help">
+          <Row label="Intro & tips" sub="Watch the welcome again, and see the Getting started list and page tips."><Btn kind="outlined" icon="help" onClick={() => { replay(); nav('/my-day'); }}>Show again</Btn></Row>
+        </Card>
         <Card title="Session">
           <Row label="Password" sub="Change the password you sign in with"><Btn kind="outlined" icon="key" onClick={() => setPw(true)}>Change password</Btn></Row>
           <Row label="Sign out" sub="Your data stays saved"><Btn kind="outlined" icon="logout" onClick={() => supabase.auth.signOut()}>Sign out</Btn></Row>
@@ -346,7 +352,7 @@ function Account() {
   );
 }
 
-function PasswordDialog({ onClose }: { onClose: () => void }) {
+export function PasswordDialog({ onClose, title }: { onClose: () => void; title?: string }) {
   const toast = useToast();
   const [a, setA] = useState(''), [b, setB] = useState('');
   const [show, setShow] = useState(false);
@@ -362,7 +368,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
   };
   return (
     <Dialog onClose={onClose} width={440} label="Change password">
-      <span className="t-hs">Change password</span>
+      <span className="t-hs">{title ?? 'Change password'}</span>
       <Field label="New password" type={show ? 'text' : 'password'} value={a} onChange={v => { setA(v); setErr(''); }} autoFocus bg="var(--surface-high)" autoComplete="new-password"
         trail={<IBtn sm icon={show ? 'eyeOff' : 'eye'} label={show ? 'Hide password' : 'Show password'} onClick={() => setShow(!show)} />} />
       <Field label="Repeat new password" type={show ? 'text' : 'password'} value={b} onChange={v => { setB(v); setErr(''); }} bg="var(--surface-high)" autoComplete="new-password" onKeyDown={e => e.key === 'Enter' && save()} />

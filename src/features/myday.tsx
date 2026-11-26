@@ -12,6 +12,7 @@ import { useMiniTimer } from './mini';
 import { SampleBanner } from './common';
 import { TimelineView } from './timeline';
 import { useIsMobile } from '../lib/native';
+import { GettingStarted } from './onboarding';
 
 export function MyDayPage() {
   const st = useStore();
@@ -34,9 +35,10 @@ export function MyDayPage() {
         <div className="title"><span className="t-hl">My Day</span><span className="t-bm c-muted">{fmtDayShortish()} · {left ? `${left} to do` : 'all done'}{done ? ` · ${done} done` : ''}</span></div>
         <div className="actions"><IBtn icon="tune" label="View and filter" tip={false} kind={va.isOpen || filterOn(filter) ? 'selected' : 'standard'} onClick={e => va.open(e)} /></div>
       </div>
+      {active && <RunCard t={active} onPopOut={() => mini.open()} />}
+      <GettingStarted />
       <SampleBanner />
       {view !== 'timeline' && <FilterChips value={filter} onChange={setFilter} shown={tasks.length} total={all.length} />}
-      {active && <RunCard t={active} onPopOut={() => mini.open()} />}
       <PlanLine />
       {view === 'timeline' ? <TimelineView /> : all.length === 0
         ? <div className="empty"><Icon name="sun" /><div className="t-tm" style={{ color: 'var(--on-surface)' }}>Plan your day</div><div className="t-bm" style={{ maxWidth: 320 }}>Add what you’ll do today, give it an estimate, then press ▶ and try to beat it.</div></div>
@@ -62,6 +64,7 @@ export function MyDayPage() {
           <Seg value={view} onChange={v => st.updateSettings({ myDayView: v })} items={[{ value: 'list', icon: 'list', tip: 'List' }, { value: 'board', icon: 'board', tip: 'Board' }, { value: 'timeline', icon: 'timeline', tip: 'Timeline' }]} />
         </div>
       </div>
+      <GettingStarted />
       <SampleBanner />
       {view !== 'timeline' && <FilterChips value={filter} onChange={setFilter} shown={tasks.length} total={all.length} />}
 

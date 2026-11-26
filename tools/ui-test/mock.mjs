@@ -2,9 +2,12 @@
 // (the sandbox cannot reach supabase.co). Implements just what the app uses.
 import crypto from 'node:crypto';
 
-export function createMock() {
+/** createMock({ fresh: true }) = a brand-new account (sees the welcome journey); default = an account that's past it */
+export function createMock({ fresh = false } = {}) {
   const USER = { id: '3284feb9-a6e6-4c59-826e-e9ce61936efb', email: 'ontrack-test@example.com', aud: 'authenticated', role: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString() };
   const db = { projects: [], tasks: [], journal_entries: [], user_settings: [], notifications: [], daily_checkins: [], time_blocks: [] };
+  if (!fresh) db.user_settings.push({ id: crypto.randomUUID(), user_id: USER.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), display_name: 'Ontrack Test', seeded: false,
+    data: { onboarding: { done: true, checklist: 'hidden', seen: { myday: true, timer: true, journal: true, insights: true, projects: true, timeline: true } } } });
   const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
   const jwt = b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64({ sub: USER.id, email: USER.email, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 * 24 }) + '.sig';
   const session = () => ({ access_token: jwt, token_type: 'bearer', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, refresh_token: 'r', user: USER });
@@ -48,6 +51,13 @@ export function createMock() {
         if (body.password && body.password !== 'test-password') return json(400, { error: 'invalid_grant', error_description: 'Invalid login credentials', code: 'invalid_credentials', msg: 'Invalid login credentials' });
         return json(200, session());
       }
+      // sign-up with "confirm email" off: returns a session straight away (the name lands in user_metadata)
+      if (url.includes('/signup')) {
+        const body = req.postDataJSON?.() ?? {};
+        USER.email = body.email ?? USER.email; USER.user_metadata = body.data ?? {};
+        return json(200, session());
+      }
+      if (url.includes('/recover')) return json(200, {});
       if (url.includes('/logout')) return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } });
       if (url.includes('/user')) return json(200, USER);
       return json(200, {});

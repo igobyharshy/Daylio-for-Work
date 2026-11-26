@@ -1,0 +1,48 @@
+// New-user journey: create account → welcome → set-up → first task → first timer → checklist and page tips.
+// usage: node tools/ui-test/onboarding.mjs [phone|desktop] [light|dark]
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import { createMock } from './mock.mjs';
+const require = createRequire('/opt/npm-tools/node_modules/');
+const { chromium } = require('playwright');
+const kind = process.argv[2] || 'phone', theme = process.argv[3] || 'light';
+const phone = kind === 'phone';
+const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+const ctx = await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 820 } });
+const mock = createMock({ fresh: true });
+await ctx.route(/supabase\.co\/(auth|rest)\//, r => mock.handle(r));
+await ctx.route(/supabase\.co\/realtime/, r => r.abort());
+const page = await ctx.newPage();
+const errs = []; page.on('pageerror', e => errs.push(e.message));
+fs.mkdirSync('tools/ui-test/shots', { recursive: true });
+for (const f of fs.readdirSync('tools/ui-test/shots')) if (f.startsWith(`o-${kind}-${theme}-`)) fs.unlinkSync('tools/ui-test/shots/' + f);
+let n = 0;
+const shot = async name => { await page.waitForTimeout(450); n++; await page.screenshot({ path: `tools/ui-test/shots/o-${kind}-${theme}-${String(n).padStart(2, '0')}-${name}.png` }); };
+const click = sel => (phone ? page.locator(sel).first().tap({ timeout: 5000 }) : page.locator(sel).first().click({ timeout: 5000 }));
+const step = async (name, fn) => { try { await fn(); await shot(name); } catch (e) { errs.push(`${name}: ${e.message.split('\n')[0]}`); await shot(name + '-FAILED'); } };
+
+await page.addInitScript(t => { try { localStorage.setItem('ontrack-theme', t); } catch { /* */ } }, theme);
+await page.goto('http://localhost:4173');
+await step('signin', async () => {});
+await step('signup', async () => { await click('button:has-text("Create an account")'); });
+await step('signup-filled', async () => { await page.fill('input[name=name]', 'Asha Rao'); await page.fill('input[name=email]', 'asha@example.com'); await page.fill('input[name=password]', 'correct-horse'); });
+await step('welcome-1', async () => { await click('button[type=submit]'); await page.waitForSelector('.ob', { timeout: 15000 }); });
+await step('welcome-2', async () => { await click('.ob-foot .btn:has-text("Next")'); });
+await step('welcome-3', async () => { await click('.ob-foot .btn:has-text("Next")'); });
+await step('you', async () => { await click('.ob-foot .btn:has-text("Set up")'); });
+await step('look', async () => { await click('.ob-foot .btn:has-text("Continue")'); });
+await step('look-green', async () => { await click('.accent-sw[aria-label="Teal"]'); });
+await step('start', async () => { await click('.ob-foot .btn:has-text("Continue")'); });
+await step('task', async () => { await click('.ob-choice:has-text("Start fresh")'); });
+await step('task-filled', async () => { await click('.ob .chip:has-text("Plan this week")'); });
+await step('go', async () => { await click('.ob-foot .btn:has-text("Add to My Day")'); });
+await step('started', async () => { await click('.ob-foot .btn:has-text("Start the timer")'); await page.waitForTimeout(1300); });
+await step('coach-next', async () => { await page.locator('.coach-bubble .btn').first().click(); await page.waitForTimeout(1300); });
+await step('checklist', async () => { if (await page.locator('.coach').count()) await page.locator('.coach-bubble .btn').first().click(); await page.waitForTimeout(400); });
+await step('journal-tip', async () => { await page.goto('http://localhost:4173/journal'); await page.waitForSelector('.content'); await page.waitForTimeout(1400); });
+await step('insights', async () => { if (await page.locator('.coach').count()) await page.locator('.coach-bubble .btn').first().click(); await page.goto('http://localhost:4173/insights'); await page.waitForSelector('.content'); await page.waitForTimeout(1400); });
+await step('back-myday', async () => { if (await page.locator('.coach').count()) await page.locator('.coach-bubble .btn').first().click(); await page.goto('http://localhost:4173/my-day'); await page.waitForSelector('.content'); await page.waitForTimeout(1000); });
+await step('finish', async () => { await click('.run-card .btn:has-text("Done"), .run-card .btn.filled'); await page.waitForTimeout(800); });
+await step('replay', async () => { await click(phone ? '[aria-label="Account menu"]' : '.side .profile, [aria-label="Account menu"], .side-profile'); await click('.menu-item:has-text("Intro")'); });
+console.log(errs.length ? 'PROBLEMS:\n' + errs.join('\n') : 'no problems');
+await browser.close();

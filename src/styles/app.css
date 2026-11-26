@@ -315,8 +315,16 @@ a { color: var(--primary); text-decoration: none; }
 .hbar-track > i { display: block; height: 100%; border-radius: 4px; background: var(--warning); }
 
 /* Sign in */
-.signin { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; }
+.signin { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; overflow: auto; }
+.signin-wrap { display: flex; align-items: center; gap: 64px; max-width: 960px; width: 100%; justify-content: center; }
+.signin-side { flex: 1; max-width: 400px; display: flex; flex-direction: column; gap: 28px; }
+.signin-claim { font: 400 36px/44px var(--font); margin: 0; letter-spacing: -0.3px; }
+.signin-pt { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--primary-container); color: var(--on-primary-container); flex: none; }
+.signin-brand-sm { display: none; }
 .signin-card { width: 400px; max-width: 100%; background: var(--surface-lowest); border-radius: 24px; box-shadow: var(--elev-1); padding: 32px; display: flex; flex-direction: column; gap: 20px; --label-bg: var(--surface-lowest); }
+.signin-switch { text-align: center; color: var(--on-surface-variant); padding-top: 4px; border-top: 1px solid var(--outline-variant); padding-top: 16px; }
+.signin-mail { display: grid; place-items: center; height: 96px; border-radius: 20px; background: var(--primary-container); color: var(--on-primary-container); }
+@media (max-width: 860px) { .signin-side { display: none; } .signin-brand-sm { display: flex; } }
 
 /* Mini timer (pop-out window) */
 /* mini (pop-out) timer: plain surface, dark track, primary ring; scales uniformly with the window */
@@ -628,3 +636,62 @@ button.entry-card:hover { border-color: var(--outline-variant); }
 .wd-row { flex-wrap: wrap; }
 .wd-btn { width: 40px; height: 40px; border-radius: 20px; border: 1px solid var(--outline-variant); font: 500 14px/20px var(--font); color: var(--on-surface); display: grid; place-items: center; }
 .wd-btn.on { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+
+.tag-btn { display: inline-flex; border-radius: 8px; }
+.tag-btn:hover { filter: brightness(0.96); }
+
+/* ---------- onboarding: welcome journey ---------- */
+.ob { position: fixed; inset: 0; z-index: 160; background: var(--surface); color: var(--on-surface); display: flex; flex-direction: column; align-items: center;
+  padding: calc(var(--sat, 0px) + 8px) 16px calc(var(--sab, 0px) + 20px); animation: fade 200ms var(--ease); overflow-y: auto; }
+.ob-top { width: 100%; max-width: 560px; display: flex; align-items: center; gap: 12px; min-height: 48px; }
+.ob-progress { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-high); overflow: hidden; }
+.ob-progress > i { display: block; height: 100%; background: var(--primary); border-radius: 2px; transition: width 300ms var(--ease); }
+.ob-body { flex: 1; width: 100%; max-width: 520px; display: flex; flex-direction: column; justify-content: center; padding: 16px 0; animation: ob-in 280ms var(--ease-emph); }
+@keyframes ob-in { from { opacity: 0; transform: translateY(12px); } }
+.ob-step { display: flex; flex-direction: column; gap: 16px; }
+.ob-step.center { align-items: center; text-align: center; }
+.ob-step h1 { font: 400 28px/36px var(--font); margin: 0; letter-spacing: -0.2px; }
+.ob-step p { margin: 0; font: 400 16px/24px var(--font); color: var(--on-surface-variant); max-width: 460px; }
+.ob-kicker { font: 600 12px/16px var(--font); letter-spacing: 0.8px; text-transform: uppercase; color: var(--primary); }
+.ob-art { display: grid; place-items: center; min-height: 170px; margin-bottom: 8px; }
+.ob-big { font: 300 30px/36px var(--font); color: var(--primary); }
+.ob-bars { display: flex; align-items: flex-end; gap: 10px; height: 150px; width: 240px; padding: 0 8px; border-bottom: 2px solid var(--outline-variant); }
+.ob-bars > i { flex: 1; border-radius: 6px 6px 0 0; background: var(--primary); opacity: 0.85; }
+.ob-bars > i:nth-child(4) { background: var(--warning); }
+.ob-loop { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; margin-bottom: 8px; }
+.ob-loop-step { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 10px; border-radius: 20px; background: var(--surface-low); text-align: center; }
+.ob-loop-ic { width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; background: var(--primary-container); color: var(--on-primary-container); }
+.ob-loop-ic .icon { width: 26px; height: 26px; }
+.ob-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ob-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px; border-radius: 20px; border: 1px solid var(--outline-variant); text-align: left; background: var(--surface-lowest); }
+.ob-choice > .icon { width: 28px; height: 28px; color: var(--primary); margin-bottom: 4px; }
+.ob-choice:hover { border-color: var(--primary); }
+.ob-foot { width: 100%; max-width: 520px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 8px; }
+.ob-foot .btn.big { height: 52px; border-radius: 26px; font-size: 16px; justify-content: center; }
+.ob-dots { display: flex; justify-content: center; gap: 8px; padding-top: 6px; }
+.ob-dots > i { width: 8px; height: 8px; border-radius: 4px; background: var(--outline-variant); transition: width 200ms var(--ease); }
+.ob-dots > i.on { width: 24px; background: var(--primary); }
+@media (max-width: 520px) { .ob-choices { grid-template-columns: 1fr; } .ob-step h1 { font-size: 24px; line-height: 32px; } .ob-loop { grid-template-columns: 1fr; } .ob-loop-step { flex-direction: row; text-align: left; padding: 12px; } .ob-loop-step .t-bs { display: none; } .ob-art { min-height: 150px; } }
+
+/* ---------- Getting started (My Day) ---------- */
+.gs { border-radius: 20px; background: var(--surface-low); border: 1px solid var(--outline-variant); overflow: hidden; }
+.gs.all { background: var(--primary-container); color: var(--on-primary-container); border-color: transparent; }
+.gs-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 12px; text-align: left; }
+.gs-list { display: flex; flex-direction: column; padding: 0 12px 10px; }
+.gs-item { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 4px; border-top: 1px solid var(--outline-variant); }
+.gs-ic { width: 32px; height: 32px; border-radius: 16px; display: grid; place-items: center; background: var(--surface-high); color: var(--on-surface-variant); flex: none; }
+.gs-item.done .gs-ic { background: var(--primary); color: var(--on-primary); }
+.gs-item.done .t-bl { color: var(--on-surface-variant); text-decoration: line-through; }
+
+/* ---------- coach marks ---------- */
+.coach { position: fixed; inset: 0; z-index: 140; animation: fade 200ms var(--ease); }
+.coach-hole { position: fixed; border-radius: 16px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.45), 0 0 0 2px var(--primary); pointer-events: none; transition: all 200ms var(--ease); }
+.coach-bubble { position: fixed; display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: 20px; background: var(--surface-lowest); color: var(--on-surface); box-shadow: var(--elev-3); animation: ob-in 240ms var(--ease-emph); }
+
+/* drawer: start the timer from the task (all sizes) */
+  /* drawer: start the timer from the task */
+.start-block { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px 12px 12px; border-radius: 16px; background: var(--primary-container); color: var(--on-primary-container); text-align: left; }
+.start-block .start-ic { width: 44px; height: 44px; border-radius: 22px; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); flex: none; }
+.start-block .start-ic .icon { width: 24px; height: 24px; }
+.start-block .c-muted { color: inherit; opacity: 0.75; }
+.gs-do { padding: 6px 14px; border-radius: 16px; background: var(--secondary-container); color: var(--on-secondary-container); font: 500 13px/18px var(--font); flex: none; }

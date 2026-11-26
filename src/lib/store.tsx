@@ -135,7 +135,8 @@ export function StoreProvider({ session, children }: { session: Session; childre
         projects = [inbox, ...projects];
       }
       if (!settingsRow) {
-        const name = (session.user.email ?? '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const meta = (session.user.user_metadata?.name as string | undefined)?.trim();
+        const name = meta || (session.user.email ?? '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const { data, error } = await supabase.from('user_settings').insert({ user_id: userId, display_name: name, data: DEFAULT_SETTINGS, seeded: false }).select().single();
         if (error) { fail(error); return; }
         settingsRow = data;

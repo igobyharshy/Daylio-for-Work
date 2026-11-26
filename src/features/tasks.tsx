@@ -177,6 +177,54 @@ function PhoneLine({ t, now, overdue }: { t: Task; now: number; overdue: boolean
   return null;
 }
 
+/** Phone rows: swipe right to finish (or reopen), swipe left to move to tomorrow. Vertical swipes still scroll. */
+function useSwipe(onRight: () => void, onLeft: (() => void) | null) {
+  const st = useRef<{ x: number; y: number; id: number; mode: 'idle' | 'swipe' | 'scroll' } | null>(null);
+  const reset = (el: HTMLElement) => { el.classList.remove('swiping', 'swipe-r', 'swipe-l', 'armed'); el.style.removeProperty('--sx'); };
+  const TH = 96;
+  return {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if (e.pointerType === 'mouse' || (e.target as HTMLElement).closest('button')) return;
+      st.current = { x: e.clientX, y: e.clientY, id: e.pointerId, mode: 'idle' };
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const s = st.current; if (!s || s.id !== e.pointerId || document.body.classList.contains('is-dragging')) return;
+      const dx = e.clientX - s.x, dy = e.clientY - s.y;
+      if (s.mode === 'idle') {
+        if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { s.mode = 'scroll'; return; }
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5 && (dx > 0 || onLeft)) s.mode = 'swipe'; else return;
+      }
+      if (s.mode !== 'swipe') return;
+      const el = e.currentTarget;
+      const x = dx > 0 ? Math.min(dx, 160) : onLeft ? Math.max(dx, -160) : 0;
+      el.classList.add('swiping'); el.classList.toggle('swipe-r', x > 0); el.classList.toggle('swipe-l', x < 0); el.classList.toggle('armed', Math.abs(x) >= TH);
+      el.style.setProperty('--sx', x + 'px');
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLElement>) => {
+      const s = st.current; st.current = null; if (!s || s.mode !== 'swipe') return;
+      const el = e.currentTarget; const dx = e.clientX - s.x;
+      // swallow the click that follows the swipe
+      const stop = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
+      window.addEventListener('click', stop, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 300);
+      reset(el);
+      if (dx >= TH) onRight(); else if (dx <= -TH && onLeft) onLeft();
+    },
+    onPointerCancel: (e: React.PointerEvent<HTMLElement>) => { st.current = null; reset(e.currentTarget); },
+  };
+}
+
+/** combine the drag props (data-drag-id + onPointerDown) with the swipe handlers */
+function merge(drag: Record<string, unknown> | undefined, sw: ReturnType<typeof useSwipe>) {
+  const d = (drag ?? {}) as { onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void } & Record<string, unknown>;
+  return { ...d, ...sw, onPointerDown: (e: React.PointerEvent<HTMLElement>) => { sw.onPointerDown(e); d.onPointerDown?.(e); } };
+}
+
+/** clicks inside a menu/dialog rendered from a row bubble through React to the row: ignore those */
+const fromOverlay = (e: React.MouseEvent) => !!(e.target as HTMLElement).closest?.('.popover, .scrim');
+/** taps on a row's trailing buttons stay with the button; taps on the estimate or time text open the task */
+const btnOnly = (e: React.MouseEvent) => { if ((e.target as HTMLElement).closest('button, .popover, .scrim')) e.stopPropagation(); };
+
 // ---------- Task row ----------
 export function TaskRow({ t, showProject = true, showSun = false, carry = false, drag }: {
   t: Task; showProject?: boolean; showSun?: boolean; carry?: boolean; drag?: Record<string, unknown>;
@@ -197,6 +245,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   const calm = (st.settings.rowDetails ?? 'hover') === 'hover';
   // phones: no hover, so calm rows show one quiet line with the single thing that matters right now
   const phone = useIsMobile() && calm;
+  const swipe = useSwipe(() => act.toggleDone(t), done ? null : () => act.tomorrow(t));
   // touch: a long press that doesn't turn into a drag opens the task menu
   const rowRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -218,8 +267,8 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m" data-tip={`Reminder ${relDay(isoDate(new Date(t.remindAt)))} ${fmtClock(t.remindAt)}`}><Icon name="bell" /></span>);
 
   if (phone) return (
-    <div ref={rowRef} className={cx('task-row phone', done && 'done', amber && 'amber', running && 'live', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
-      onClick={() => ui.openTask(t.id)} data-task={t.id}
+    <div ref={rowRef} {...merge(drag, swipe)} className={cx('task-row phone', done && 'done', amber && 'amber', running && 'live', ui.taskId === t.id && 'sel', isFlash && 'flash')}
+      onClick={e => { if (!fromOverlay(e)) ui.openTask(t.id); }} data-task={t.id}
       onContextMenu={e => { e.preventDefault(); if (!drag || (e.nativeEvent as PointerEvent).pointerType === 'mouse') ma.open(e.currentTarget as HTMLElement); }}>
       <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'}
         onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
@@ -230,7 +279,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
         <PhoneLine t={t} now={now} overdue={overdue} />
       </div>
       {!done && (
-        <div className="trail" onClick={e => e.stopPropagation()}>
+        <div className="trail" onClick={btnOnly}>
           {!running && !t.elapsedMs && !!t.estimateMin && <span className="est">{fmtMin(totalEstimateMin(t))}</span>}
           {showSun && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? 'Remove from My Day' : 'Add to My Day'} tip={false} className={cx(inMyDay && 'on-primary')} onClick={() => act.toggleMyDay(t)} />}
           {running ? <IBtn icon="pause" kind="pc" label="Pause" tip={false} onClick={() => act.pause(t)} />
@@ -243,7 +292,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
 
   return (
     <div className={cx('task-row', calm && 'calm', done && 'done', amber && 'amber', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
-      onClick={() => ui.openTask(t.id)} data-task={t.id}>
+      onClick={e => { if (!fromOverlay(e)) ui.openTask(t.id); }} data-task={t.id}>
       {drag && <span className="grip" data-drag-handle aria-hidden><Icon name="drag" /></span>}
       <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} data-tip={done ? 'Mark not done' : 'Mark done'}
         onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
@@ -257,7 +306,7 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
         </span>
         {meta.length > 0 && <Meta>{meta}</Meta>}
       </div>
-      <div className="trail" onClick={e => e.stopPropagation()}>
+      <div className="trail" onClick={btnOnly}>
         <span className={cx('row gap-6', calm && !keepChip && 'quiet')}>{done ? <OutcomeChips t={t} /> : <TimeChip t={t} now={now} />}</span>
         {showSun && !done && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? (running ? 'Running tasks stay in My Day' : 'Remove from My Day') : 'Add to My Day'} className={cx(inMyDay ? 'on-primary' : '', calm && 'quiet')} onClick={() => act.toggleMyDay(t)} />}
         {!done && (running ? <IBtn icon="pause" kind="pc" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" kind="pc" className={cx(calm && 'quiet')} label={t.elapsedMs ? 'Resume' : 'Start timer'} onClick={() => act.start(t)} />)}
@@ -460,6 +509,18 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   const project = st.projectById(proj ?? st.inbox?.id);
   const parsed = useMemo(() => parseQuickAdd(title), [title]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  // desktop: press N anywhere (not while typing) to add a task
+  useEffect(() => {
+    if (phone) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'n' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const a = document.activeElement as HTMLElement | null;
+      if (a?.matches('input, textarea, select, [contenteditable=true]') || document.querySelector('.popover, .scrim, .sheet .inline-input:focus')) return;
+      e.preventDefault(); setOpen(true);
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [phone]);
   useEffect(() => {
     if (!open || phone) return; // phones: the composer's scrim handles outside taps (no tap-through)
     const h = (e: PointerEvent) => {
@@ -491,7 +552,7 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   if (!open) {
     return (
       <button className="add-bar state" onClick={() => setOpen(true)}>
-        <Icon name="add" />{label}
+        <Icon name="add" /><span className="grow">{label}</span>{!phone && <span className="keycap" aria-hidden>N</span>}
       </button>
     );
   }
@@ -608,7 +669,7 @@ function BoardCard({ t, showProject, now, drag, onOpen, act }: { t: Task; showPr
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // phones: same calm content as the list rows (long-press for the menu)
   if (phone) return (
-    <div ref={cardRef} className={cx('kcard phone', amber && 'amber', ui.taskId === t.id && 'sel', running && 'running', done && 'done')} {...drag} onClick={onOpen}
+    <div ref={cardRef} className={cx('kcard phone', amber && 'amber', ui.taskId === t.id && 'sel', running && 'running', done && 'done')} {...drag} onClick={e => { if (!fromOverlay(e)) onOpen(); }}
       onContextMenu={e => { e.preventDefault(); if ((e.nativeEvent as PointerEvent).pointerType === 'mouse') ma.open(e.currentTarget as HTMLElement); }}>
       <div className="row gap-4" style={{ alignItems: 'flex-start' }}>
         <button className={cx('check sm', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
@@ -619,7 +680,7 @@ function BoardCard({ t, showProject, now, drag, onOpen, act }: { t: Task; showPr
           <PhoneLine t={t} now={now} overdue={!done && !!t.dueDate && isOverdue(t, st.settings, now)} />
         </span>
         {!done && (
-          <span className="row" style={{ alignItems: 'center', paddingTop: 2 }} onClick={e => e.stopPropagation()}>
+          <span className="row" style={{ alignItems: 'center', paddingTop: 2 }} onClick={btnOnly}>
             {!running && !t.elapsedMs && !!t.estimateMin && <span className="est">{fmtMin(totalEstimateMin(t))}</span>}
             {running ? <IBtn icon="pause" kind="pc" label="Pause" tip={false} onClick={() => act.pause(t)} /> : <IBtn icon="play" kind={t.elapsedMs ? 'pc' : 'standard'} className="play" label={t.elapsedMs ? 'Resume' : 'Start timer'} tip={false} onClick={() => act.start(t)} />}
           </span>
@@ -629,7 +690,7 @@ function BoardCard({ t, showProject, now, drag, onOpen, act }: { t: Task; showPr
     </div>
   );
   return (
-    <div className={cx('kcard', amber && 'amber', ui.taskId === t.id && 'sel', running && 'running')} {...drag} onClick={onOpen}>
+    <div className={cx('kcard', amber && 'amber', ui.taskId === t.id && 'sel', running && 'running')} {...drag} onClick={e => { if (!fromOverlay(e)) onOpen(); }}>
       <div className="row gap-4" style={{ alignItems: 'flex-start' }}>
         <button className={cx('check sm', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
           <Icon name={done ? 'checkCircle' : 'circle'} size={20} />

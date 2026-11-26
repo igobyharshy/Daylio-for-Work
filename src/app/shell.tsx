@@ -8,6 +8,7 @@ import { Btn, Chip, IBtn, Popover, Tag, cx, useAnchor, type Placement } from '..
 import { myDayTasks, needsReflection, tagChipTone } from '../lib/select';
 import { TimerChip } from '../features/common';
 import { ACCENTS } from '../lib/accents';
+import { useReplayIntro } from '../features/onboarding';
 import { fmtClock, fmtDayShort, isDone, relDay, isoDate, cap } from '../lib/time';
 
 /** Apply the colour theme to <html data-theme>; 'system' follows the device. Mirrors to localStorage so the next load paints right away. */
@@ -114,6 +115,7 @@ export function ProfileMenu({ anchor, onClose, placement }: { anchor: HTMLElemen
   const theme = st.settings.theme ?? 'light';
   const name = st.displayName || 'You';
   const initial = (st.displayName || st.email || '?').charAt(0).toUpperCase();
+  const replay = useReplayIntro();
   return (
     <Popover anchor={anchor} onClose={onClose} placement={placement}>
           <div className="menu profile-menu" role="menu" style={{ width: 272 }}>
@@ -124,6 +126,7 @@ export function ProfileMenu({ anchor, onClose, placement }: { anchor: HTMLElemen
             <div className="divider" />
             <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/work-day'); onClose(); }}><Icon name="settings" />Settings</button>
             <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/account'); onClose(); }}><Icon name="person" />Account</button>
+            <button role="menuitem" className="menu-item state" onClick={() => { replay(); nav('/my-day'); onClose(); }}><Icon name="help" />Intro & tips</button>
             <div className="divider" />
             <div className="menu-label">Theme</div>
             <div className="theme-seg" role="radiogroup" aria-label="Theme">

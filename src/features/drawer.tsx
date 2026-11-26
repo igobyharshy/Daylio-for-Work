@@ -45,6 +45,7 @@ export function TaskDrawer({ t }: { t: Task }) {
   useEffect(() => { const el = titleRef.current; if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }, [title]);
   useEffect(() => { const el = noteRef.current; if (el) { el.style.height = 'auto'; el.style.height = Math.max(72, el.scrollHeight) + 'px'; } }, [note]);
   const inMyDay = act.inMyDay(t);
+  useCloseOnEsc(() => ui.openTask(null));
   const sb = startBy(t, st.settings);
   const extra = t.reEstimates.reduce((a, r) => a + r.addMin, 0);
   const linked = st.entries.filter(e => e.taskIds.includes(t.id));
@@ -70,7 +71,7 @@ export function TaskDrawer({ t }: { t: Task }) {
           <span className="t-tm ellipsis">{p?.name ?? 'Inbox'}</span>
           <Icon name="chevDown" />
         </button>
-        {phone && <IBtn icon="moreV" label="Task options" tip={false} kind={ma.isOpen ? 'selected' : 'standard'} onClick={e => ma.open(e)} />}
+        <IBtn icon="moreV" label="Task options" tip={false} kind={ma.isOpen ? 'selected' : 'standard'} onClick={e => ma.open(e)} />
         <IBtn icon="close" label="Close" onClick={() => ui.openTask(null)} />
       </div>
       {ma.isOpen && <TaskMenu t={t} anchor={ma.el} onClose={ma.close} />}
@@ -89,8 +90,8 @@ export function TaskDrawer({ t }: { t: Task }) {
           {done && <div className="row gap-8" style={{ flexWrap: 'wrap', padding: '2px 12px 10px 40px' }}><OutcomeChips t={t} /></div>}
         </div>
 
-        {/* phones: start the timer right here (desktop rows already have ▶) */}
-        {phone && !done && !t.firstStartedAt && !running && (
+        {/* start the timer right from the task */}
+        {!done && !t.firstStartedAt && !running && (
           <button className="start-block state" onClick={() => act.start(t)}>
             <span className="start-ic"><Icon name="play" /></span>
             <span className="col grow" style={{ alignItems: 'flex-start' }}>
@@ -151,7 +152,7 @@ export function TaskDrawer({ t }: { t: Task }) {
                 <button className={cx('val-btn state', !t.dueDate && 'placeholder', overdue && 'c-error')} onClick={e => da.open(e)}>
                   {t.dueDate ? cap(dueLabel(t)!) : 'Add due date'}<Icon name="edit" className="hover-only" />
                 </button>
-                {overdue && <Tag kind="err">Overdue</Tag>}
+                {overdue && <button className="tag-btn" onClick={e => da.open(e)} aria-label="Overdue: change the due date"><Tag kind="err">Overdue</Tag></button>}
               </div>
               {sb && !done && sb.getTime() > now && <span className="t-bs c-muted" style={{ padding: '0 10px 6px' }}>Start by {relDay(isoDate(sb)) === 'today' ? '' : cap(relDay(isoDate(sb))) + ' '}{fmtClock(sb)}{!t.dueTime ? ' · based on the end of your work day' : ''}</span>}
             </div>
@@ -303,4 +304,20 @@ function Steps({ t }: { t: Task }) {
 function nextSlot() {
   const d = new Date(Math.ceil(Date.now() / (15 * 60000)) * 15 * 60000);
   return hhmm(d);
+}
+
+/** Esc closes a side sheet (after any open menu or dialog, and after leaving a text field) */
+export function useCloseOnEsc(close: () => void) {
+  const ref = useRef(close); ref.current = close;
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (document.querySelector('.popover, .scrim, .focus, .add-panel')) return;
+      const a = document.activeElement as HTMLElement | null;
+      if (a && a.matches('input, textarea, [contenteditable=true]')) { a.blur(); return; }
+      ref.current();
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
 }

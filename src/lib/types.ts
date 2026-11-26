@@ -38,6 +38,19 @@ export interface Repeat {
   nextId?: ID | null;
 }
 
+export interface Onboarding {
+  /** finished or skipped the welcome */
+  done?: boolean;
+  doneAt?: string;
+  /** the Getting started card on My Day */
+  checklist?: 'hidden';
+  /** one-time page tips already shown */
+  seen?: Record<string, boolean>;
+  /** "watch the intro again" */
+  replay?: boolean;
+  replayAt?: string;
+}
+
 export interface Task {
   id: ID;
   projectId: ID | null;
@@ -157,6 +170,8 @@ export interface Settings {
   theme?: 'light' | 'dark' | 'system';
   /** colour theme (src/lib/accents.ts); purple when unset */
   accent?: string;
+  /** first-run journey state (src/features/onboarding.tsx); unset for people who started before it existed */
+  onboarding?: Onboarding;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

@@ -137,6 +137,9 @@ export function NativeBridge() {
     const back = CapApp.addListener('backButton', ({ canGoBack }) => {
       const { ui: u, mini: m, nav: n, path } = ref.current;
       if (m.focusOpen) { m.closeFocus(); return; }
+      if (document.querySelector('.ob') && !document.querySelector('.popover, .scrim')) { window.dispatchEvent(new Event('ot-back')); return; }
+      const coach = document.querySelector<HTMLElement>('.coach');
+      if (coach) { coach.click(); return; }
       const composer = document.querySelector<HTMLElement>('.add-scrim');
       if (composer && !document.querySelector('.popover, .scrim')) { composer.click(); return; }
       if (document.querySelector('.popover, .scrim')) { esc(); return; }

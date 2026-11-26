@@ -16,16 +16,19 @@ import { ProjectPage, ProjectsPage, NewProjectDialog } from './features/projects
 import { DayPanel, JournalPage, ReviewPage, WhatHappenedDialog } from './features/journal';
 import { EstimateFirstHost } from './features/tasks';
 import { InsightsPage } from './features/insights';
-import { SettingsPage } from './features/settings';
+import { PasswordDialog, SettingsPage } from './features/settings';
 import { TaskDrawer } from './features/drawer';
 import { MiniTimerProvider } from './features/mini';
+import { OnboardingGate } from './features/onboarding';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [signedOut, setSignedOut] = useState(false);
+  // opened from a "reset password" email: ask for the new password right away
+  const [recovery, setRecovery] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((ev, s) => { if (ev === 'SIGNED_OUT') setSignedOut(true); setSession(s); });
+    const { data } = supabase.auth.onAuthStateChange((ev, s) => { if (ev === 'SIGNED_OUT') setSignedOut(true); if (ev === 'PASSWORD_RECOVERY') setRecovery(true); setSession(s); });
     return () => data.subscription.unsubscribe();
   }, []);
   if (!supabaseConfigured) return <div className="loading">Ontrack isn’t configured: missing Supabase environment variables.</div>;
@@ -40,6 +43,7 @@ export default function App() {
               <UIWithStore>
                 <MiniTimerProvider>
                   <Shell />
+                  {recovery && <PasswordDialog title="Set a new password" onClose={() => setRecovery(false)} />}
                 </MiniTimerProvider>
               </UIWithStore>
             </BrowserRouter>
@@ -107,6 +111,7 @@ function Shell() {
       <EstimateFirstHost />
       {wh && <WhatHappenedDialog t={wh} onClose={() => ui.openWhatHappened(null)} />}
       {ui.newProject && <NewProjectDialog onClose={() => ui.setNewProject(false)} />}
+      {st.loaded && <OnboardingGate />}
     </div>
   );
 }

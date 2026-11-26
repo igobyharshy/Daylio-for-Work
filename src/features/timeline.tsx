@@ -285,7 +285,7 @@ export function TimelineView() {
       <div className="tl-toolbar">
         <div className="row gap-4">
           <IBtn icon="chevLeft" label="Previous day" onClick={() => goDay(-1)} />
-          <Btn kind={isToday ? 'text' : 'tonal'} onClick={() => setDay(today)} disabled={isToday}>Today</Btn>
+          {!isToday && <Btn kind="tonal" onClick={() => setDay(today)}>Today</Btn>}
           <IBtn icon="chevRight" label="Next day" onClick={() => goDay(1)} />
           <span className="t-tm" style={{ paddingLeft: 6 }}>{fmtDayLong(parseDate(day))}</span>
         </div>

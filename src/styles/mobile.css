@@ -301,11 +301,6 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .tl-panel > .row:first-child { padding: 4px 4px 0 4px !important; }
 }
 @media (max-width: 720px) {
-  /* drawer: start the timer from the task */
-  .start-block { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px 12px 12px; border-radius: 16px; background: var(--primary-container); color: var(--on-primary-container); text-align: left; }
-  .start-block .start-ic { width: 44px; height: 44px; border-radius: 22px; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); flex: none; }
-  .start-block .start-ic .icon { width: 24px; height: 24px; }
-  .start-block .c-muted { color: inherit; opacity: 0.75; }
   /* drawer timer: time on top, buttons underneath */
   .timer-block.phone > .row:first-child { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
   .timer-block.phone > .row:first-child > .col.grow { flex: 1 1 100%; }
@@ -366,4 +361,19 @@ body.is-dragging .board { scroll-snap-type: none; }
   .notif-banner { flex-wrap: wrap; padding: 14px 16px !important; }
   .notif-banner > .t-bm { flex: 1 1 calc(100% - 44px); }
   .notif-banner > .btn { margin-left: auto; }
+}
+@media (max-width: 720px) {
+  /* swipe a row: right = done, left = tomorrow */
+  .task-row.phone { position: relative; touch-action: pan-y; overflow: hidden; }
+  .task-row.phone > * { transition: transform 180ms var(--ease); }
+  .task-row.phone.swiping > * { transform: translateX(var(--sx, 0)); transition: none; }
+  .task-row.phone.swipe-r { background: color-mix(in srgb, var(--primary) 18%, var(--surface-low)); }
+  .task-row.phone.swipe-l { background: var(--secondary-container); }
+  .task-row.phone.swipe-r.armed { background: var(--primary); }
+  .task-row.phone.swipe-r::before, .task-row.phone.swipe-l::before { position: absolute; top: 50%; transform: translateY(-50%); font: 600 14px/20px var(--font); }
+  .task-row.phone.swipe-r::before { content: '✓ Done'; left: 18px; color: var(--primary); }
+  .task-row.phone.done.swipe-r::before { content: '↺ Not done'; }
+  .task-row.phone.swipe-r.armed::before { color: var(--on-primary); }
+  .task-row.phone.swipe-l::before { content: 'Tomorrow →'; right: 18px; color: var(--on-secondary-container); }
+  .task-row.phone.swipe-l.armed { background: color-mix(in srgb, var(--on-secondary-container) 22%, var(--secondary-container)); }
 }

@@ -131,14 +131,16 @@ export function Engine() {
     return () => { clearInterval(id); document.title = 'Ontrack'; };
   }, []);
 
-  // offer Windows notifications once, with a gentle snackbar
+  // offer Windows notifications once, with a gentle snackbar — for new people, only after their first timer (not mid-welcome)
+  const startedOnce = st.tasks.some(t => !t.isSample && !!t.firstStartedAt);
+  const ready = (st.settings.onboarding?.done ?? true) && (startedOnce || !st.settings.onboarding?.doneAt);
   useEffect(() => {
-    if (isNative || typeof Notification === 'undefined' || Notification.permission !== 'default') return;
+    if (!ready || isNative || typeof Notification === 'undefined' || Notification.permission !== 'default') return;
     const id = setTimeout(() => {
       if (!once('ot-asked-notif')) return;
       toast.show(isMobileNow() ? 'Turn on notifications so reminders reach you.' : 'Turn on Windows notifications so reminders reach you while you work.', { icon: 'bell', duration: 15000, action: { label: 'Turn on', onClick: () => Notification.requestPermission() } });
     }, 2500);
     return () => clearTimeout(id);
-  }, [toast]);
+  }, [toast, ready]);
   return null;
 }
