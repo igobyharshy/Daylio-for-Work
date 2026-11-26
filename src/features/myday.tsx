@@ -11,6 +11,7 @@ import { fmtDayLong, isDone, isOverdue, todayISO } from '../lib/time';
 import { useMiniTimer } from './mini';
 import { SampleBanner } from './common';
 import { TimelineView } from './timeline';
+import { useIsMobile } from '../lib/native';
 
 export function MyDayPage() {
   const st = useStore();
@@ -24,6 +25,32 @@ export function MyDayPage() {
   const va = useAnchor();
   const hidden = view === 'timeline' ? [] : hiddenTasks(st.settings.taskStatuses, tasks);
   const hiddenNames = [...new Set(hidden.map(t => t.status))];
+  const phone = useIsMobile();
+
+  // phones: one quiet header button (view, filter, groups), the timer only when one runs, roomy rows
+  if (phone) return (
+    <>
+      <div className="page-head">
+        <div className="title"><span className="t-hl">My Day</span><span className="t-bm c-muted">{fmtDayShortish()} · {left ? `${left} to do` : 'all done'}{done ? ` · ${done} done` : ''}</span></div>
+        <div className="actions"><IBtn icon="tune" label="View and filter" tip={false} kind={va.isOpen || filterOn(filter) ? 'selected' : 'standard'} onClick={e => va.open(e)} /></div>
+      </div>
+      <SampleBanner />
+      {view !== 'timeline' && <FilterChips value={filter} onChange={setFilter} shown={tasks.length} total={all.length} />}
+      {active && <RunCard t={active} onPopOut={() => mini.open()} />}
+      <PlanLine />
+      {view === 'timeline' ? <TimelineView /> : all.length === 0
+        ? <div className="empty"><Icon name="sun" /><div className="t-tm" style={{ color: 'var(--on-surface)' }}>Plan your day</div><div className="t-bm" style={{ maxWidth: 320 }}>Add what you’ll do today, give it an estimate, then press ▶ and try to beat it.</div></div>
+        : view === 'board' ? <TaskBoard tasks={tasks} myDay /> : <TaskGroups tasks={tasks} carry scope="myday" myDay />}
+      {hidden.length > 0 && (
+        <button className="row gap-8 t-bs c-muted hidden-note" onClick={e => va.open(e)}>
+          <Icon name="eyeOff" size={18} /><span>{hidden.length} hidden in {hiddenNames.join(', ')}</span>
+        </button>
+      )}
+      {va.isOpen && <ViewOptions anchor={va.el} onClose={va.close} showRows={view === 'list'} phoneView={{ view, filter, setFilter }} />}
+      <div className="grow" />
+      <div className="bottom-bar"><AddTaskBar /></div>
+    </>
+  );
 
   return (
     <>
@@ -62,7 +89,7 @@ export function MyDayPage() {
 }
 
 /** My Day view options: which status groups show (list + board) and how much each task row shows */
-function ViewOptions({ anchor, onClose, showRows }: { anchor: HTMLElement | null; onClose: () => void; showRows: boolean }) {
+function ViewOptions({ anchor, onClose, showRows, phoneView }: { anchor: HTMLElement | null; onClose: () => void; showRows: boolean; phoneView?: { view: 'list' | 'board' | 'timeline'; filter: TaskFilter; setFilter: (f: TaskFilter) => void } }) {
   const st = useStore();
   const nav = useNavigate();
   const list = st.settings.taskStatuses.filter(s => s.name !== 'Archived');
@@ -72,6 +99,16 @@ function ViewOptions({ anchor, onClose, showRows }: { anchor: HTMLElement | null
   return (
     <Popover anchor={anchor} onClose={onClose} placement="below-end">
       <div className="menu view-opts" style={{ width: 320, padding: '12px 0 8px' }}>
+        {phoneView && <>
+          <span className="t-ts" style={{ padding: '0 16px 8px' }}>View</span>
+          <div className="row gap-8" style={{ padding: '0 16px 4px' }}>
+            <Seg value={phoneView.view} onChange={v => st.updateSettings({ myDayView: v })} items={[{ value: 'list', icon: 'list', label: 'List' }, { value: 'board', icon: 'board', label: 'Board' }, { value: 'timeline', icon: 'timeline', label: 'Timeline' }]} />
+            <span className="grow" />
+            {phoneView.view !== 'timeline' && <FilterButton value={phoneView.filter} onChange={phoneView.setFilter} showProjects />}
+          </div>
+          {phoneView.view === 'timeline' ? null : <div className="divider" style={{ margin: '12px 0' }} />}
+        </>}
+        {phoneView?.view === 'timeline' ? null : <>
         <span className="t-ts" style={{ padding: '0 16px' }}>Groups in My Day</span>
         <span className="t-bs c-muted" style={{ padding: '2px 16px 6px' }}>Turn a group off to hide it, and its tasks, from My Day.</span>
         {list.map(s => {
@@ -89,12 +126,13 @@ function ViewOptions({ anchor, onClose, showRows }: { anchor: HTMLElement | null
             </label>
           );
         })}
+        </>}
         {showRows && <>
           <div className="divider" style={{ margin: '8px 0' }} />
           <span className="t-ts" style={{ padding: '0 16px' }}>Task details</span>
-          <span className="t-bs c-muted" style={{ padding: '2px 16px 8px' }}>Project, dates, due and estimate on each row.</span>
+          <span className="t-bs c-muted" style={{ padding: '2px 16px 8px' }}>{phoneView ? 'Calm shows one line: the timer, overdue or a due time.' : 'Project, dates, due and estimate on each row.'}</span>
           <div style={{ padding: '0 16px 4px' }}>
-            <Seg value={st.settings.rowDetails ?? 'hover'} onChange={v => st.updateSettings({ rowDetails: v })} items={[{ value: 'hover', label: 'On hover' }, { value: 'always', label: 'Always' }]} />
+            <Seg value={st.settings.rowDetails ?? 'hover'} onChange={v => st.updateSettings({ rowDetails: v })} items={phoneView ? [{ value: 'hover', label: 'Calm' }, { value: 'always', label: 'All details' }] : [{ value: 'hover', label: 'On hover' }, { value: 'always', label: 'Always' }]} />
           </div>
         </>}
         <div className="divider" style={{ margin: '8px 0 4px' }} />
@@ -112,6 +150,7 @@ function PlanLine() {
   const ui = useUI();
   const a = useAnchor();
   const today = todayISO();
+  const phone = useIsMobile();
   const arch = useMemo(() => archivedIds(st.projects), [st.projects]);
   const list = st.tasks.filter(t => !isDone(t) && isLive(t, arch) && !(t.myDayDate && t.myDayDate <= today) && t.dueDate && t.dueDate <= today)
     .sort((x, y) => (x.dueDate ?? '').localeCompare(y.dueDate ?? ''));
@@ -121,7 +160,7 @@ function PlanLine() {
   return (
     <div className="plan-line">
       <Icon name="event" />
-      <span className="t-bm grow">{list.length} {list.length === 1 ? 'task is' : 'tasks are'} due today{overdue ? ` or overdue (${overdue} overdue)` : ''} but not on My Day.</span>
+      <span className="t-bm grow">{phone ? `${list.length} more ${list.length === 1 ? 'task' : 'tasks'} due${overdue ? ` (${overdue} overdue)` : ' today'}` : `${list.length} ${list.length === 1 ? 'task is' : 'tasks are'} due today${overdue ? ` or overdue (${overdue} overdue)` : ''} but not on My Day.`}</span>
       <Btn kind="tonal" onClick={e => a.open(e)}>Plan</Btn>
       {a.isOpen && (
         <Popover anchor={a.el} onClose={a.close} placement="below-end">
@@ -142,3 +181,7 @@ function PlanLine() {
     </div>
   );
 }
+
+const filterOn = (f: TaskFilter) => JSON.stringify(f) !== JSON.stringify(EMPTY_FILTER);
+/** "Thu 26 Nov" — short enough for one line on a phone */
+const fmtDayShortish = () => new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });

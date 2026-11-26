@@ -44,14 +44,15 @@ const tryStep = async (name, fn) => { try { await fn(); await shot(name); } catc
 const back = async () => { await page.keyboard.press('Escape'); await page.waitForTimeout(300); };
 
 await page.goto(base + '/my-day'); await page.waitForSelector('.content'); await setTheme();
-await tryStep('board', async () => { await page.click('[aria-label="Board"]'); });
-await tryStep('timeline', async () => { await page.click('[aria-label="Timeline"]'); });
-await page.click('[aria-label="List"]');
+await tryStep('view-sheet', async () => { await page.click('[aria-label="View and filter"]'); });
+await tryStep('board', async () => { await page.click('[aria-label="Board"]'); await back(); });
+await tryStep('timeline', async () => { await page.click('[aria-label="View and filter"]'); await page.click('[aria-label="Timeline"]'); await back(); });
+await page.click('[aria-label="View and filter"]'); await page.click('[aria-label="List"]'); await back();
 await tryStep('task-open', async () => { await page.locator('.task-row').first().click(); await page.waitForSelector('.sheet'); });
 await tryStep('task-project-menu', async () => { await page.locator('.sheet-head .val-btn').click(); });
 await back();
 await page.click('.sheet [aria-label="Close"]').catch(() => {});
-await tryStep('task-menu', async () => { await page.locator('.task-row [aria-label="More"], .task-row .row-more').first().click(); });
+await tryStep('task-menu', async () => { await page.locator('.task-row').first().click({ button: 'right' }); });
 await back();
 await tryStep('add-task', async () => { await page.click('.add-bar'); await page.keyboard.type('Write spec 30m'); });
 await page.keyboard.press('Enter'); await back();
@@ -59,7 +60,8 @@ await tryStep('start-timer', async () => {
   const row = page.locator('.task-row').filter({ hasText: 'Write spec' }).first();
   await row.locator('[aria-label^="Start"], [aria-label="Start timer"]').first().click();
 });
-await tryStep('focus', async () => { await page.click('[aria-label="Focus mode"]'); await page.waitForSelector('.focus'); });
+await page.evaluate(() => document.querySelector('.main').scrollTo(0, 0)); await shot('now-card');
+await tryStep('focus', async () => { await page.click('.run-card .btn.text'); await page.waitForSelector('.focus'); });
 await page.waitForTimeout(4500); await shot('focus-calm');
 await back();
 await tryStep('mini-player', async () => { await page.goto(base + '/projects'); await page.waitForSelector('.content'); await setTheme(); });

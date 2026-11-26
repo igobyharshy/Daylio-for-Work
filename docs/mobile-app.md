@@ -21,6 +21,15 @@
 - Board view: one swipeable column at a time. Journal calendar: compact cells. Settings cards stack.
 - Projects list: one line per project (status · open · % done · tags) instead of the wide table.
 
+## Calm My Day on phones (round 2, 26 Nov)
+- Header: title + "Thu 26 Nov · 4 to do" and ONE tune button. Its sheet holds View (List/Board/Timeline), Filter, Groups and Task details (Calm / All details).
+- The Now card shows only while a timer runs (no "Nothing running" box). Phone Now card: title, "done by", big time, then Focus · pause · Done.
+- Calm phone rows (`rowDetails` = hover, the default): check, title (up to 2 lines), estimate as plain text, play. At most one quiet line under the title, in this order: the timer (running/paused/over), Overdue, a due time or a later due day. "Due today" is never shown (it's the default).
+- Project, steps, reminder, planned time, outcome tags and ⋮ are gone from phone rows; long-press a row for the task menu, tap it for everything else. "All details" brings the full rows back.
+- Empty groups are hidden on phones and Done starts folded. More space: rows 60 px, 8 px apart, 28 px between groups.
+- Plan line is one short outlined line ("1 more task due today · Plan").
+- Timeline on phones: no legend, "To plan" is a plain list (no drag grip; the clock button plans it in the next free slot).
+
 ## Focus timer (`src/features/focus.tsx`)
 - On phones the pop-out button (`PopOutBtn`) becomes **Focus mode** (fullscreen icon). Also opens from the mini player
   and from the timer notification.

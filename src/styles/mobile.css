@@ -201,3 +201,57 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .content .row.gap-24:not(.t-bm) { flex-direction: column; align-items: stretch !important; gap: 16px; }
   .content .row.gap-24:not(.t-bm) > .grow { flex-basis: auto !important; width: 100%; }
 }
+
+/* ---------- Phone My Day: calm (26 Nov, round 2) ---------- */
+@media (max-width: 720px) {
+  .content { gap: 16px; }
+  .page-head { min-height: 56px; }
+  .page-head .title .t-bm { font-size: 13px; line-height: 18px; }
+
+  /* groups: roomier, quieter headers */
+  .col.gap-24:has(> .col > .group-head) { gap: 28px; }
+  .group-head { height: 32px; padding: 0 10px 0 2px; font-size: 14px; }
+  .group-head .t-ts { font-weight: 600; }
+  .list { gap: 8px; }
+
+  /* calm phone rows: check · title (one quiet line) · estimate · play */
+  .task-row.phone { min-height: 60px; padding: 8px 6px 8px 6px; gap: 8px; border-radius: 16px; background: var(--surface-low); }
+  .task-row.phone .text { gap: 2px; }
+  .task-row.phone .title { font: 400 16px/22px var(--font); letter-spacing: 0.1px; }
+  .task-row.phone .line { font: 400 13px/18px var(--font); color: var(--on-surface-variant); }
+  .task-row.phone .line.primary { color: var(--primary); font-weight: 500; }
+  .task-row.phone .line.warn { color: var(--warning); font-weight: 500; }
+  .task-row.phone .line.err { color: var(--error); }
+  .task-row.phone .trail { gap: 0; align-self: center; }
+  .task-row.phone .est { font: 500 13px/18px var(--font); color: var(--on-surface-variant); padding: 0 2px 0 4px; font-variant-numeric: tabular-nums; }
+  .task-row.phone .ibtn.play { color: var(--primary); }
+  .task-row.phone.live { background: color-mix(in srgb, var(--primary-container) 55%, var(--surface-low)); }
+  .task-row.phone.amber { background: var(--warning-container); }
+  .task-row.phone.done { background: transparent; min-height: 52px; }
+  .task-row.phone.done .title { color: var(--on-surface-variant); }
+  .clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+
+  /* Now card on phones: title + big time, then Focus · pause · Done */
+  .run-card.phone { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 14px 12px 10px 16px; border-radius: 24px; }
+  .run-card.phone .rc-top { display: flex; align-items: center; gap: 12px; text-align: left; color: inherit; }
+  .run-card.phone .rc-sub { color: var(--on-surface-variant); }
+  .run-card.phone.amber .rc-sub { color: inherit; opacity: 0.8; }
+  .run-card.phone .rc-time { font: 400 34px/40px var(--font); color: var(--primary); flex: none; letter-spacing: -0.5px; }
+  .run-card.phone.amber .rc-time { color: var(--warning); }
+  .run-card.phone .rc-acts { display: flex; align-items: center; gap: 8px; margin-left: -8px; }
+  .run-card.phone .rc-acts .btn.text { color: inherit; }
+
+  .plan-line { min-height: 48px; padding: 4px 6px 4px 14px; background: transparent; border: 1px solid var(--outline-variant); }
+  .plan-line > .t-bm { flex: 1 1 auto; }
+  .hidden-note { align-self: flex-start; padding: 6px 8px; border-radius: 16px; }
+  .view-opts .seg > button { padding: 0 10px; }
+
+  /* timeline on phones: fewer controls up top, "To plan" as a tidy list */
+  .tl-toolbar { gap: 8px; }
+  .tl-toolbar > .grow { display: none; }
+  .tl-sum { display: none; }
+  .tl-panel { max-height: none; background: transparent; padding: 0; gap: 8px; }
+  .tl-chip { min-height: 56px; padding: 6px 4px 6px 14px; border-radius: 16px; background: var(--surface-low); cursor: default; }
+  .tl-chip > .icon:first-child { display: none; }
+  .tl-chip .t-bm { font-size: 15px; line-height: 21px; }
+}

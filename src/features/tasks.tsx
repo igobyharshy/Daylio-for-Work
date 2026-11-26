@@ -13,6 +13,7 @@ import {
 import { avgOverrunMin, sortBetween, statusGroups } from '../lib/select';
 import { Ring } from '../ui/kit';
 import { useDragSort } from './dnd';
+import { useIsMobile } from '../lib/native';
 
 // ---------- small pieces ----------
 export function ProjectLabel({ p, muted }: { p?: Project; muted?: boolean }) {
@@ -143,6 +144,23 @@ function TimeChip({ t, now }: { t: Task; now: number }) {
   return <Tag icon="hourglass">{fmtMin(totalEstimateMin(t))}</Tag>;
 }
 
+/** Phone rows: at most one short line — the timer while it runs, else overdue, else a due time. */
+function PhoneLine({ t, now, overdue }: { t: Task; now: number; overdue: boolean }) {
+  const { settings } = useStore();
+  if (isDone(t)) return null;
+  const running = !!t.runStartedAt;
+  const up = settings.timerDirection === 'up';
+  if (running || t.elapsedMs > 0) {
+    const paused = running ? '' : 'Paused · ';
+    if (!t.estimateMin) return <span className={cx('line tnum', running && 'primary')}>{paused}{fmtTimer(elapsed(t, now))} elapsed</span>;
+    if (isOverEstimate(t, now)) return <span className="line warn tnum">{paused}{fmtTimer(-remainingMs(t, now)).replace('+', '')} over estimate</span>;
+    return <span className={cx('line tnum', running && 'primary')}>{paused}{up ? timerView(t, now, 'up').line : `${fmtTimer(remainingMs(t, now))} left`}</span>;
+  }
+  if (overdue && t.dueDate) return <span className="line err">Overdue · {t.dueDate === todayISO() && t.dueTime ? `was due ${fmtClock(atTime(t.dueDate, t.dueTime))}` : `was due ${relDay(t.dueDate)}`}</span>;
+  if (t.dueDate && (t.dueTime || t.dueDate !== todayISO())) return <span className="line">{dueLabel(t)}</span>;
+  return null;
+}
+
 // ---------- Task row ----------
 export function TaskRow({ t, showProject = true, showSun = false, carry = false, drag }: {
   t: Task; showProject?: boolean; showSun?: boolean; carry?: boolean; drag?: Record<string, unknown>;
@@ -161,6 +179,8 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   const isFlash = flash?.id === t.id && Date.now() - flash.at < 1500;
   // calm rows: just the title; details fade in on hover. A live or paused timer stays visible.
   const calm = (st.settings.rowDetails ?? 'hover') === 'hover';
+  // phones: no hover, so calm rows show one quiet line with the single thing that matters right now
+  const phone = useIsMobile() && calm;
   const keepChip = running || (!done && t.elapsedMs > 0);
   const overdue = !done && !!t.dueDate && isOverdue(t, st.settings, now);
   const meta: ReactNode[] = [];
@@ -171,6 +191,29 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   if (!done && t.plannedStart) meta.push(<span className="m" data-tip="Planned on the Timeline"><Icon name="schedule" />{relDay(isoDate(new Date(t.plannedStart))) === 'today' ? '' : cap(relDay(isoDate(new Date(t.plannedStart)))) + ' '}{fmtClock(t.plannedStart)}</span>);
   if (t.steps.length) meta.push(<span className="m"><Icon name="checklist" />{stepsDone}/{t.steps.length}</span>);
   if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m" data-tip={`Reminder ${relDay(isoDate(new Date(t.remindAt)))} ${fmtClock(t.remindAt)}`}><Icon name="bell" /></span>);
+
+  if (phone) return (
+    <div className={cx('task-row phone', done && 'done', amber && 'amber', running && 'live', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
+      onClick={() => ui.openTask(t.id)} onContextMenu={e => { e.preventDefault(); ma.open(e.currentTarget as HTMLElement); }} data-task={t.id}>
+      <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'}
+        onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
+        <Icon name={done ? 'checkCircle' : 'circle'} />
+      </button>
+      <div className="text">
+        <span className="title clamp2">{t.title || 'Untitled task'}</span>
+        <PhoneLine t={t} now={now} overdue={overdue} />
+      </div>
+      {!done && (
+        <div className="trail" onClick={e => e.stopPropagation()}>
+          {!running && !t.elapsedMs && !!t.estimateMin && <span className="est">{fmtMin(totalEstimateMin(t))}</span>}
+          {showSun && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? 'Remove from My Day' : 'Add to My Day'} tip={false} className={cx(inMyDay && 'on-primary')} onClick={() => act.toggleMyDay(t)} />}
+          {running ? <IBtn icon="pause" kind="pc" label="Pause" tip={false} onClick={() => act.pause(t)} />
+            : <IBtn icon="play" kind={t.elapsedMs ? 'pc' : 'standard'} className="play" label={t.elapsedMs ? 'Resume' : 'Start timer'} tip={false} onClick={() => act.start(t)} />}
+        </div>
+      )}
+      {ma.isOpen && <TaskMenu t={t} anchor={ma.el} onClose={ma.close} />}
+    </div>
+  );
 
   return (
     <div className={cx('task-row', calm && 'calm', done && 'done', amber && 'amber', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
@@ -210,6 +253,7 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   const dir = st.settings.timerDirection ?? 'down';
   const v = timerView(t, now, dir);
   const p = st.projectById(t.projectId);
+  const phone = useIsMobile();
   const stepsDone = t.steps.filter(s => s.done).length;
   const meta: ReactNode[] = [];
   if (p) meta.push(<ProjectLabel p={p} />);
@@ -217,6 +261,24 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   if (t.dueDate) meta.push(<DueText t={t} settings={st.settings} now={now} />);
   if (running && t.estimateMin && rem > 0) meta.push(<span className="m">done by {fmtClock(new Date(now + rem))}</span>);
   if (!running) meta.push(<span className="m"><Icon name="pause" />Paused</span>);
+  // phones: just the task, its time and three buttons; the rest lives in the task and the focus timer
+  if (phone) return (
+    <div className={cx('run-card phone', amber && 'amber')}>
+      <button className="rc-top" onClick={onPopOut} aria-label="Open focus timer">
+        <span className="col grow" style={{ minWidth: 0, gap: 2, textAlign: 'left' }}>
+          <span className="t-tl clamp2">{t.title}</span>
+          <span className="t-bs rc-sub">{!running ? 'Paused' : t.estimateMin && rem > 0 ? `done by ${fmtClock(new Date(now + rem))}` : amber ? 'over the estimate' : 'no estimate'}</span>
+        </span>
+        <span className="rc-time tnum">{v.main}</span>
+      </button>
+      <div className="rc-acts">
+        <Btn kind="text" icon="fullscreen" onClick={onPopOut}>Focus</Btn>
+        <span className="grow" />
+        {running ? <IBtn icon="pause" kind="pc" label="Pause" tip={false} onClick={() => act.pause(t)} /> : <IBtn icon="play" kind="pc" label="Resume" tip={false} onClick={() => act.start(t)} />}
+        <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
+      </div>
+    </div>
+  );
   return (
     <div className={cx('run-card', amber && 'amber')}>
       <Ring pct={v.pct} size={44} stroke={4} color={amber ? 'var(--warning)' : 'var(--primary)'} track={amber ? 'color-mix(in srgb, var(--warning) 35%, var(--warning-container))' : 'var(--surface-lowest)'}>
@@ -262,8 +324,8 @@ export function useMoveTask(tasks: Task[], myDay = false) {
 }
 
 const collapsedKey = (k: string) => `ot-collapsed-${k}`;
-function useCollapsed(key: string) {
-  const [v, setV] = useState(() => { try { return localStorage.getItem(collapsedKey(key)) === '1'; } catch { return false; } });
+function useCollapsed(key: string, initial = false) {
+  const [v, setV] = useState(() => { try { const x = localStorage.getItem(collapsedKey(key)); return x == null ? initial : x === '1'; } catch { return initial; } });
   return [v, (x: boolean) => { setV(x); try { localStorage.setItem(collapsedKey(key), x ? '1' : '0'); } catch { /* ignore */ } }] as const;
 }
 
@@ -280,7 +342,10 @@ export function TaskGroups({ tasks, showProject = true, showSun = false, carry =
   );
 }
 function Group({ name, tone, tasks, scope, drag, showProject, showSun, carry }: { name: string; tone: string; tasks: Task[]; scope: string; drag: (id: string) => Record<string, unknown>; showProject: boolean; showSun: boolean; carry: boolean }) {
-  const [collapsed, setCollapsed] = useCollapsed(`${scope}-${name}`);
+  const phone = useIsMobile();
+  // phones start with Done folded away; the choice is remembered per device
+  const [collapsed, setCollapsed] = useCollapsed(`${scope}-${name}${phone ? '-phone' : ''}`, phone && name === 'Done');
+  if (phone && !tasks.length) return null;
   return (
     <div className="col gap-8">
       <button className="group-head state" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}>
