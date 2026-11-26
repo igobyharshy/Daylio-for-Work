@@ -51,7 +51,7 @@ A personal **estimate-training task timer and work journal** (formerly "Daylio f
 ## 2. Links & accounts
 | What | Where |
 |---|---|
-| **Live app (real data)** | https://ontrack-harshy.vercel.app (also ontrack-harshy1.vercel.app, daylioforwork.vercel.app) |
+| **Live app (real data)** | https://beingontrack.vercel.app (renamed 26 Nov; ontrack-harshy.vercel.app redirects there; also ontrack-harshy1.vercel.app, daylioforwork.vercel.app) |
 | GitHub | `igobyharshy/Daylio-for-Work`. Branch **`main` = production**. Old branches: `ux-pass-1`, `ux-pass-2`, `build/ontrack-v1` |
 | Vercel | project `ontrack` (`prj_f2Tg7jH60t39Plr1Ew8N94YXZSbx`), team `harshy1` (`team_Pq0AgXklHoWIIOLKPPgnReR3`). Pushes to `main` auto-deploy to production (confirmed 24 Nov). Previews are behind Vercel login (SSO). |
 | Supabase **production** | project `ontrack`, id `jehnoqlzcuxhqwfeywyw`, ap-south-1 (Mumbai), free plan |

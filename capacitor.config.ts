@@ -8,8 +8,11 @@ const config: CapacitorConfig = {
   appName: 'Ontrack',
   webDir: 'native-shell',
   server: {
-    url: 'https://ontrack-harshy.vercel.app/my-day',
+    url: 'https://beingontrack.vercel.app/my-day',
     androidScheme: 'https',
+    // every address the app has lived at stays inside the app; anything else opens in the browser.
+    // (Without this, a domain redirect sends the whole app out to Chrome.)
+    allowNavigation: ['beingontrack.vercel.app', 'ontrack-harshy.vercel.app', 'ontrack-harshy1.vercel.app', 'daylioforwork.vercel.app'],
     errorPath: 'offline.html',
   },
   android: {

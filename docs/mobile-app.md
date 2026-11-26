@@ -2,7 +2,7 @@
 
 ## What it is
 - **One app, two shells.** Below 720 px wide the web app switches to a phone layout. The Android app is a
-  Capacitor shell that opens the live site (`https://ontrack-harshy.vercel.app`), so phone and PC always run
+  Capacitor shell that opens the live site (`https://beingontrack.vercel.app`; every past domain is in `allowNavigation`, because a redirect to a domain not on that list opens the browser instead), so phone and PC always run
   the same code against the same Supabase account. Every push to `main` updates the phone app too.
 - **Sync:** realtime subscriptions (already in `store.tsx`) merge changes from other devices instantly.
   On phones the app also refetches every time it comes back to the foreground (3 s threshold instead of
