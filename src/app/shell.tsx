@@ -8,6 +8,7 @@ import { Btn, Chip, IBtn, Popover, Tag, cx, useAnchor, type Placement } from '..
 import { myDayTasks, needsReflection, tagChipTone } from '../lib/select';
 import { TimerChip } from '../features/common';
 import { ACCENTS } from '../lib/accents';
+import { useToast } from '../ui/Toast';
 import { useReplayIntro } from '../features/onboarding';
 import { fmtClock, fmtDayShort, isDone, relDay, isoDate, cap } from '../lib/time';
 
@@ -116,6 +117,16 @@ export function ProfileMenu({ anchor, onClose, placement }: { anchor: HTMLElemen
   const name = st.displayName || 'You';
   const initial = (st.displayName || st.email || '?').charAt(0).toUpperCase();
   const replay = useReplayIntro();
+  const toast = useToast();
+  const invite = async () => {
+    const url = `${location.origin}/signup`;
+    const text = 'I use Ontrack to get better at estimating how long work takes. Try it:';
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Ontrack', text, url }); return; }
+    } catch { /* cancelled */ return; }
+    try { await navigator.clipboard.writeText(`${text} ${url}`); toast.show('Invite link copied. Paste it to a friend.', { icon: 'checkCircle' }); }
+    catch { toast.show(`Share this link: ${url}`, { icon: 'info', duration: 10000 }); }
+  };
   return (
     <Popover anchor={anchor} onClose={onClose} placement={placement}>
           <div className="menu profile-menu" role="menu" style={{ width: 272 }}>
@@ -127,6 +138,7 @@ export function ProfileMenu({ anchor, onClose, placement }: { anchor: HTMLElemen
             <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/work-day'); onClose(); }}><Icon name="settings" />Settings</button>
             <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/account'); onClose(); }}><Icon name="person" />Account</button>
             <button role="menuitem" className="menu-item state" onClick={() => { replay(); nav('/my-day'); onClose(); }}><Icon name="help" />Intro & tips</button>
+            <button role="menuitem" className="menu-item state" onClick={() => { invite(); onClose(); }}><Icon name="personAdd" />Invite a friend</button>
             <div className="divider" />
             <div className="menu-label">Theme</div>
             <div className="theme-seg" role="radiogroup" aria-label="Theme">

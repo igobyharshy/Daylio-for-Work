@@ -12,6 +12,10 @@ has row-level security (`auth.uid() = user_id`) for select/insert/update/delete,
 
 ## The journey
 1. **Sign in / Create account** (`src/app/SignIn.tsx`). Name, email, password (8+). Desktop shows the value props beside the form.
+   - Invite link: **/signup** (also /join, /invite, ?signup) opens straight on "Create your account"; the address follows the mode.
+   - Live password strength hint; "Send the link again" on the check-your-email screen (when Confirm email is on).
+   - Account menu → **Invite a friend** shares (phone) or copies (desktop) the /signup link.
+   - Test: `node tools/ui-test/signup.mjs phone|desktop`.
    Also: Forgot password → reset email → the app opens a "Set a new password" dialog (`PASSWORD_RECOVERY`).
    If email confirmation is on, the form switches to "Check your email".
 2. **Welcome** (`src/features/onboarding.tsx`, full screen, progress bar, Back, Skip, Android back = step back):

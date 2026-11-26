@@ -13,14 +13,26 @@ const POINTS: [IconName, string, string][] = [
 
 /** Sign in, create an account, or reset a password. Email + password only. */
 export function SignIn({ signedOut }: { signedOut?: boolean }) {
-  const [mode, setMode] = useState<Mode>('in');
+  // a shared invite link (…/signup or ?signup) opens straight on "Create your account"
+  const [mode, setMode] = useState<Mode>(() => (/^\/(signup|join|invite)\b/.test(location.pathname) || new URLSearchParams(location.search).has('signup') ? 'up' : 'in'));
+  const [resent, setResent] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const go = (m: Mode) => { setMode(m); setErr(''); };
+  const go = (m: Mode) => {
+    setMode(m); setErr(''); setResent(false);
+    // keep the address bar honest, so a refresh (or a copied link) lands on the same screen
+    try { history.replaceState(null, '', m === 'up' ? '/signup' : '/'); } catch { /* ignore */ }
+  };
+  const resend = async () => {
+    setBusy(true);
+    const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: location.origin + '/my-day' } });
+    setBusy(false);
+    if (error) setErr(friendly(error.message)); else setResent(true);
+  };
   const friendly = (m: string) => {
     const s = m.toLowerCase();
     if (s.includes('invalid login') || s.includes('invalid credentials')) return 'That email and password don’t match. Check them and try again.';
@@ -83,6 +95,9 @@ export function SignIn({ signedOut }: { signedOut?: boolean }) {
           {(mode === 'confirm' || mode === 'reset-sent') ? (
             <>
               <div className="signin-mail"><Icon name="mail" size={40} /></div>
+              {mode === 'confirm' && <span className="t-bs c-muted">Nothing after a few minutes? Check spam, or send it again.</span>}
+              {err && <div className="row gap-8 t-bs c-error" role="alert"><Icon name="warn" size={18} />{err}</div>}
+              {mode === 'confirm' && <Btn kind="outlined" disabled={busy || resent} onClick={resend}>{resent ? 'Sent again' : busy ? 'Sending…' : 'Send the link again'}</Btn>}
               <Btn big kind="tonal" onClick={() => go('in')}>Back to sign in</Btn>
             </>
           ) : (
@@ -94,6 +109,7 @@ export function SignIn({ signedOut }: { signedOut?: boolean }) {
                   placeholder={mode === 'up' ? 'At least 8 characters' : undefined}
                   trail={<IBtn sm icon={show ? 'eyeOff' : 'eye'} label={show ? 'Hide password' : 'Show password'} onClick={() => setShow(!show)} />} />
               )}
+              {mode === 'up' && password && <PasswordMeter pw={password} />}
               {err && <div className="row gap-8 t-bs c-error" role="alert"><Icon name="warn" size={18} />{err}</div>}
               <Btn type="submit" big disabled={busy || !canSubmit}>
                 {busy ? 'One moment…' : mode === 'in' ? 'Sign in' : mode === 'up' ? 'Create account' : 'Send reset link'}
@@ -108,6 +124,19 @@ export function SignIn({ signedOut }: { signedOut?: boolean }) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/** a quick, honest strength hint while choosing a password */
+function PasswordMeter({ pw }: { pw: string }) {
+  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^\w\s]/].filter(r => r.test(pw)).length;
+  const score = pw.length < 8 ? 0 : pw.length >= 14 || (pw.length >= 10 && kinds >= 3) ? 3 : kinds >= 2 ? 2 : 1;
+  const label = ['Too short (8+ characters)', 'Okay', 'Good', 'Strong'][score];
+  return (
+    <div className="pw-meter" aria-live="polite">
+      <div className="pw-bars">{[1, 2, 3].map(i => <i key={i} className={i <= score ? `on s${score}` : ''} />)}</div>
+      <span className="t-bs c-muted">{label}</span>
     </div>
   );
 }

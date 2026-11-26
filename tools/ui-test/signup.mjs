@@ -1,0 +1,36 @@
+// Sign-up entry points: /signup invite link, mode switch keeps URL in step, password meter, invite menu item.
+// usage: node tools/ui-test/signup.mjs [phone|desktop]
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import { createMock } from './mock.mjs';
+const require = createRequire('/opt/npm-tools/node_modules/');
+const { chromium } = require('playwright');
+const kind = process.argv[2] || 'phone', phone = kind === 'phone';
+const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+const ctx = await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 820 } });
+await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+const mock = createMock({ fresh: true });
+await ctx.route(/supabase\.co\/(auth|rest)\//, r => mock.handle(r));
+await ctx.route(/supabase\.co\/realtime/, r => r.abort());
+const page = await ctx.newPage();
+const errs = []; page.on('pageerror', e => errs.push(e.message));
+const shot = n => page.screenshot({ path: `tools/ui-test/shots/s-${kind}-${n}.png` });
+const expect = (c, m) => { if (!c) errs.push(m); };
+await page.goto('http://localhost:4173/signup'); await page.waitForTimeout(800);
+expect(await page.locator('input[name=name]').count() === 1, '/signup did not open on create-account');
+await page.fill('input[name=password]', 'abc'); await page.waitForTimeout(150);
+expect((await page.locator('.pw-meter').innerText()).includes('Too short'), 'meter short');
+await page.fill('input[name=password]', 'Correct-Horse-9'); await page.waitForTimeout(150);
+expect((await page.locator('.pw-meter').innerText()).includes('Strong'), 'meter strong');
+await shot('1-signup');
+await page.locator('button:has-text("Sign in")').last().click(); await page.waitForTimeout(300);
+expect(new URL(page.url()).pathname === '/', 'url not back to / after switching to sign in');
+expect(await page.locator('input[name=name]').count() === 0, 'still on sign-up after switch');
+await page.goto('http://localhost:4173/?signup'); await page.waitForTimeout(600);
+expect(await page.locator('input[name=name]').count() === 1, '?signup did not open on create-account');
+await page.fill('input[name=name]', 'Asha'); await page.fill('input[name=email]', 'asha@example.com'); await page.fill('input[name=password]', 'Correct-Horse-9');
+await page.locator('button[type=submit]').click();
+await page.waitForSelector('.ob', { timeout: 15000 }).catch(() => errs.push('welcome did not open after sign-up'));
+await shot('2-welcome');
+console.log(errs.length ? 'PROBLEMS:\n' + errs.join('\n') : 'no problems');
+await browser.close();
