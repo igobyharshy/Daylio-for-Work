@@ -14,11 +14,11 @@ import { isMobileNow, isNative, useNotifPermission } from '../lib/native';
 import { fmtHHMM } from '../lib/time';
 import { TrackersSettings } from './trackers';
 
-const TABS = [['appearance', 'Appearance'], ['work-day', 'Work day'], ['default-tags', 'Default tags'], ['trackers', 'Trackers'], ['statuses', 'Statuses'], ['notifications', 'Notifications'], ['account', 'Account']] as const;
+const TABS = [['work-day', 'Work day'], ['default-tags', 'Default tags'], ['trackers', 'Trackers'], ['statuses', 'Statuses'], ['notifications', 'Notifications'], ['account', 'Account'], ['appearance', 'Appearance']] as const;
 const CORE = ['Not started', 'In progress', 'Done'];
 
 export function SettingsPage() {
-  const { tab = 'appearance' } = useParams();
+  const { tab = 'work-day' } = useParams();
   const nav = useNavigate();
   return (
     <>

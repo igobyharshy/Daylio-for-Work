@@ -96,7 +96,7 @@ function Shell() {
               <Route path="/journal" element={<JournalPage />} />
               <Route path="/journal/review" element={<ReviewPage />} />
               <Route path="/insights" element={<InsightsPage />} />
-              <Route path="/settings" element={<Navigate to="/settings/appearance" replace />} />
+              <Route path="/settings" element={<Navigate to="/settings/work-day" replace />} />
               <Route path="/settings/:tab" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/my-day" replace />} />
             </Routes>
