@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { isMobileNow } from './native';
 import { supabase } from './supabase';
 import type { Entry, Notif, Project, Settings, Task, ID, TimeBlock, WorkSession } from './types';
 import { DEFAULT_SETTINGS } from './types';
@@ -174,9 +175,11 @@ export function StoreProvider({ session, children }: { session: Session; childre
   // refresh when returning to the app (other device may have changed data)
   useEffect(() => {
     let last = Date.now();
-    const onVis = () => { if (document.visibilityState === 'visible' && Date.now() - last > 30000) { last = Date.now(); load(false); } };
+    const onVis = () => { if (document.visibilityState === 'visible' && Date.now() - last > (isMobileNow() ? 3000 : 30000)) { last = Date.now(); load(false); } };
+    const onOnline = () => { last = Date.now(); load(false); };
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    window.addEventListener('online', onOnline);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('online', onOnline); };
   }, [load]);
 
   // realtime: merge changes from other devices

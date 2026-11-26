@@ -8,9 +8,11 @@ import { Btn, IBtn, Ring, cx } from '../ui/kit';
 import { useToast } from '../ui/Toast';
 import { isOverEstimate, timerView } from '../lib/time';
 import { useTaskActions } from './tasks';
+import { FocusTimer } from './focus';
+import { isMobileNow } from '../lib/native';
 
-interface Mini { open: () => void; close: () => void; isOpen: boolean; supported: boolean }
-const Ctx = createContext<Mini>({ open: () => {}, close: () => {}, isOpen: false, supported: false });
+interface Mini { open: () => void; close: () => void; isOpen: boolean; supported: boolean; focusOpen: boolean; openFocus: () => void; closeFocus: () => void }
+const Ctx = createContext<Mini>({ open: () => {}, close: () => {}, isOpen: false, supported: false, focusOpen: false, openFocus: () => {}, closeFocus: () => {} });
 export const useMiniTimer = () => useContext(Ctx);
 
 declare global { interface Window { documentPictureInPicture?: { requestWindow: (o: { width: number; height: number }) => Promise<Window> } } }
@@ -20,7 +22,12 @@ export function MiniTimerProvider({ children }: { children: ReactNode }) {
   const [win, setWin] = useState<Window | null>(null);
   const toast = useToast();
   const supported = typeof window !== 'undefined' && 'documentPictureInPicture' in window;
+  const [focusOpen, setFocus] = useState(false);
+  const openFocus = useCallback(() => setFocus(true), []);
+  const closeFocus = useCallback(() => setFocus(false), []);
   const open = useCallback(async () => {
+    // phones: the pop-out becomes the full-screen focus timer
+    if (isMobileNow()) { setFocus(true); return; }
     if (!supported) { toast.show('The pop-out mini timer needs Chrome or Edge.', { icon: 'info' }); return; }
     if (win) { win.focus(); return; }
     try {
@@ -52,8 +59,9 @@ export function MiniTimerProvider({ children }: { children: ReactNode }) {
     return () => mo.disconnect();
   }, [win]);
   return (
-    <Ctx.Provider value={{ open, close, isOpen: !!win, supported }}>
+    <Ctx.Provider value={{ open, close, isOpen: !!win, supported, focusOpen, openFocus, closeFocus }}>
       {children}
+      {focusOpen && <FocusTimer onClose={closeFocus} />}
       {win && createPortal(<MiniTimer onClose={close} />, win.document.body)}
     </Ctx.Provider>
   );

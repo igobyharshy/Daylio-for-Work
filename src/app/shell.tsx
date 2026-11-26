@@ -4,7 +4,7 @@ import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { useUI } from './ui';
 import { Icon } from '../ui/Icon';
-import { Btn, Chip, IBtn, Popover, Tag, cx, useAnchor } from '../ui/kit';
+import { Btn, Chip, IBtn, Popover, Tag, cx, useAnchor, type Placement } from '../ui/kit';
 import { myDayTasks, needsReflection, tagChipTone } from '../lib/select';
 import { TimerChip } from '../features/common';
 import { fmtClock, fmtDayShort, isDone, relDay, isoDate, cap } from '../lib/time';
@@ -35,7 +35,6 @@ export function Sidebar() {
   const ba = useAnchor(), pa = useAnchor();
   const unread = st.notifs.filter(n => !n.readAt).length;
   const theme = st.settings.theme ?? 'light';
-  useApplyTheme(theme);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); ui.setSearchOpen(true); } };
     window.addEventListener('keydown', h);
@@ -70,16 +69,28 @@ export function Sidebar() {
         <IBtn sm icon="settings" label="Settings" kind={loc.pathname.startsWith('/settings') ? 'selected' : 'standard'} onClick={() => nav('/settings/work-day')} />
       </div>
       {ba.isOpen && <NotificationsPanel anchor={ba.el} onClose={ba.close} />}
-      {pa.isOpen && (
-        <Popover anchor={pa.el} onClose={pa.close} placement="above-start">
+      {pa.isOpen && <ProfileMenu anchor={pa.el} onClose={pa.close} placement="above-start" />}
+    </aside>
+  );
+}
+
+/** Account menu: settings, account, theme, sign out (sidebar drop-up on desktop, top-bar avatar on phones). */
+export function ProfileMenu({ anchor, onClose, placement }: { anchor: HTMLElement | null; onClose: () => void; placement: Placement }) {
+  const st = useStore();
+  const nav = useNavigate();
+  const theme = st.settings.theme ?? 'light';
+  const name = st.displayName || 'You';
+  const initial = (st.displayName || st.email || '?').charAt(0).toUpperCase();
+  return (
+    <Popover anchor={anchor} onClose={onClose} placement={placement}>
           <div className="menu profile-menu" role="menu" style={{ width: 272 }}>
             <div className="row gap-12" style={{ padding: '8px 12px 10px' }}>
               <span className="avatar">{initial}</span>
               <span className="col" style={{ minWidth: 0 }}><span className="t-ts ellipsis">{name}</span><span className="t-bs c-muted ellipsis">{st.email}</span></span>
             </div>
             <div className="divider" />
-            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/work-day'); pa.close(); }}><Icon name="settings" />Settings</button>
-            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/account'); pa.close(); }}><Icon name="person" />Account</button>
+            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/work-day'); onClose(); }}><Icon name="settings" />Settings</button>
+            <button role="menuitem" className="menu-item state" onClick={() => { nav('/settings/account'); onClose(); }}><Icon name="person" />Account</button>
             <div className="divider" />
             <div className="menu-label">Theme</div>
             <div className="theme-seg" role="radiogroup" aria-label="Theme">
@@ -88,15 +99,13 @@ export function Sidebar() {
               ))}
             </div>
             <div className="divider" />
-            <button role="menuitem" className="menu-item state" onClick={() => { pa.close(); supabase.auth.signOut(); }}><Icon name="logout" />Sign out</button>
+            <button role="menuitem" className="menu-item state" onClick={() => { onClose(); supabase.auth.signOut(); }}><Icon name="logout" />Sign out</button>
           </div>
-        </Popover>
-      )}
-    </aside>
+    </Popover>
   );
 }
 
-function NotificationsPanel({ anchor, onClose }: { anchor: HTMLElement | null; onClose: () => void }) {
+export function NotificationsPanel({ anchor, onClose }: { anchor: HTMLElement | null; onClose: () => void }) {
   const st = useStore();
   const ui = useUI();
   const nav = useNavigate();

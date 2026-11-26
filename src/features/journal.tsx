@@ -424,13 +424,13 @@ function JournalCalendar({ month, setMonth, entries }: { month: Date; setMonth: 
   const today = todayISO();
   return (
     <div className="col gap-8">
-      <div className="row gap-8">
+      <div className="row gap-8 jcal-toolbar">
         <IBtn icon="chevLeft" label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} />
         <IBtn icon="chevRight" label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} />
         <Btn kind="text" onClick={() => { const n = new Date(); setMonth(new Date(n.getFullYear(), n.getMonth(), 1)); }}>Today</Btn>
         <span className="grow" />
         {trackers.length > 0 && <>
-          {calT && <span className="row gap-6 t-bs c-muted">Low<span className="shade-legend" />High</span>}
+          {calT && <span className="row gap-6 t-bs c-muted jcal-legend">Low<span className="shade-legend" />High</span>}
           <Chip icon={calT?.icon ?? 'eyeOff'} trail="chevDown" onClick={e => ta.open(e)}>{calT ? `Calendar shows ${calT.name}` : 'No check-in on calendar'}</Chip>
         </>}
       </div>

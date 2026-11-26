@@ -4,7 +4,7 @@ import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
 import { activeTask } from '../lib/select';
 import { Icon } from '../ui/Icon';
-import { Btn, Confirm, IBtn, cx } from '../ui/kit';
+import { Btn, Confirm, IBtn, cx, PopOutBtn } from '../ui/kit';
 import { useToast } from '../ui/Toast';
 import { elapsed, fmtTimer, isOverEstimate, remainingMs, timerView } from '../lib/time';
 import { useTaskActions } from './tasks';
@@ -53,7 +53,7 @@ export function TimerChip({ side = false }: { side?: boolean }) {
         </span>
       </button>
       {running ? <IBtn sm icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn sm icon="play" label="Resume" onClick={() => act.start(t)} />}
-      <IBtn sm icon="pip" label="Pop out mini timer" onClick={() => mini.open()} />
+      <PopOutBtn sm onClick={() => mini.open()} />
       <IBtn sm icon="check" label="Done" onClick={() => act.finish(t)} />
     </div>
   );
@@ -65,7 +65,7 @@ export function TimerChip({ side = false }: { side?: boolean }) {
         <span className="t-ts tnum">{time}{t.estimateMin ? (over ? ' over' : ' left') : ''}</span>
       </button>
       {running ? <IBtn sm icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn sm icon="play" label="Resume" onClick={() => act.start(t)} />}
-      <IBtn sm icon="pip" label="Pop out mini timer" onClick={() => mini.open()} />
+      <PopOutBtn sm onClick={() => mini.open()} />
       <IBtn sm icon="check" label="Done" onClick={() => act.finish(t)} />
     </div>
   );

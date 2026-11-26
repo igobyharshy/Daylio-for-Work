@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '../ui/Toast';
 import { useDragSort } from './dnd';
+import { useIsMobile } from '../lib/native';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { useUI } from '../app/ui';
@@ -300,6 +301,31 @@ function ProjectTable({ list, acts }: { list: Project[]; acts: ReturnType<typeof
   const nav = useNavigate();
   const [menu, setMenu] = useState<{ p: Project; el: HTMLElement } | null>(null);
   const cols = 'minmax(200px, 2fr) minmax(120px, 1.3fr) 140px 150px 48px 150px 40px';
+  const mobile = useIsMobile();
+  // phones: one tidy line per project (name, then status · open · progress)
+  if (mobile) return (
+    <div className="col gap-4">
+      {list.map(p => {
+        const pr = projectProgress(st.tasks, p);
+        return (
+          <div key={p.id} role="button" tabIndex={0} className={cx('proj-row state row gap-12', p.archived && 'archived')} onClick={() => nav(`/projects/${p.id}`)} style={{ minHeight: 64, paddingLeft: 10 }}>
+            <span className="emoji" style={{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', fontSize: 20, background: coverColor[p.cover]?.[0], flex: 'none' }}>{p.emoji}</span>
+            <span className="col grow" style={{ minWidth: 0, gap: 2 }}>
+              <span className="row gap-6" style={{ minWidth: 0 }}><span className="t-tm ellipsis" style={{ fontSize: 15 }}>{p.name}</span>{p.isInbox && <Tag kind="pc">default</Tag>}{p.archived && <Tag>Archived</Tag>}</span>
+              <span className="meta">
+                {!p.isInbox && <span className="m"><span className="dot" style={{ background: toneDot(statusTone(p.status, st.settings.projectStatuses)) }} />{p.status}</span>}
+                {!p.isInbox && <span className="sep">·</span>}
+                <span className="m">{pr.open} open</span>
+                {!p.isInbox && <><span className="sep">·</span><span className="m">{pr.pct}% done</span></>}
+                {p.tags.length > 0 && <><span className="sep">·</span><span className="m ellipsis">{p.tags.join(', ')}</span></>}
+              </span>
+            </span>
+            <ProjectMore p={p} acts={acts} sm />
+          </div>
+        );
+      })}
+    </div>
+  );
   return (
     <div className="col gap-8">
       <div className="t-lm c-muted" style={{ display: 'grid', gridTemplateColumns: cols, gap: 16, padding: '0 12px 0 20px', height: 24, alignItems: 'center' }}>

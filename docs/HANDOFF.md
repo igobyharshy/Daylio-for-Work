@@ -170,6 +170,9 @@ docs/                  ux-pass-1-solutions.md, this file
 
 ---
 
+## 4b. Phones + Android app (26 Nov)
+Phone layout below 720 px (bottom nav, mini player, focus timer, bottom sheets) and a Capacitor Android app that opens the live site. Details: `docs/mobile-app.md`. APK: https://github.com/igobyharshy/Daylio-for-Work/releases/latest/download/Ontrack.apk (built by GitHub Actions when `android/` changes). Keep desktop unchanged when touching `src/styles/mobile.css`.
+
 ## 5. How to work on a change (the routine)
 1. **Get the code.** If the repo isn't in the session, attach `igobyharshy/Daylio-for-Work` with push access, clone it, then run `npm ci`.
 2. **Make the change.** Keep to M3 tokens in `tokens.css`, and to existing components and patterns. Don't add new screens or flows beyond what Harshy asks for without checking with him.
@@ -195,7 +198,6 @@ If a change needs a database column, follow section 3 first: snapshot, apply to 
   - end-of-day wrap-up
   - multi-select tasks
   - duplicate project
-  - a mobile layout pass
 - A spare test login `ontrack-test@example.com` exists in **production** auth. It's harmless and Harshy didn't ask to remove it.
 
 ---

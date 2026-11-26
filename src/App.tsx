@@ -4,9 +4,11 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from './lib/supabase';
 import { StoreProvider, useStore } from './lib/store';
 import { ToastProvider } from './ui/Toast';
-import { TooltipLayer } from './ui/kit';
+import { TooltipLayer, cx } from './ui/kit';
 import { UIProvider, useUI } from './app/ui';
-import { SearchOverlay, Sidebar } from './app/shell';
+import { SearchOverlay, Sidebar, useApplyTheme } from './app/shell';
+import { BottomNav, MiniPlayer, MobileTopBar, NativeBridge } from './app/mobile';
+import { isNative, useIsMobile } from './lib/native';
 import { Engine } from './app/engine';
 import { SignIn } from './app/SignIn';
 import { MyDayPage } from './features/myday';
@@ -64,6 +66,8 @@ function Shell() {
   const ui = useUI();
   const loc = useLocation();
   const mainRef = useRef<HTMLElement>(null);
+  const mobile = useIsMobile();
+  useApplyTheme(st.settings.theme ?? 'light');
   useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [loc.pathname]);
   // close the side sheets when the page changes
   useEffect(() => { ui.closeSheetsIfStale(); }, [loc.pathname]); // eslint-disable-line
@@ -71,9 +75,10 @@ function Shell() {
   const task = st.taskById(ui.taskId);
   const wh = st.taskById(ui.whatHappened);
   return (
-    <div className="app">
+    <div className={cx('app', mobile && 'm-app')}>
+      {mobile && <MobileTopBar />}
       <div className="body">
-        <Sidebar />
+        {!mobile && <Sidebar />}
         <main className="main" ref={mainRef}>
           <div className="content">
             <Routes>
@@ -93,6 +98,9 @@ function Shell() {
         {task && <TaskDrawer t={task} key={task.id} />}
         {!task && ui.day && <DayPanel />}
       </div>
+      {mobile && <MiniPlayer />}
+      {mobile && <BottomNav />}
+      {isNative && <NativeBridge />}
       <Engine />
       {ui.searchOpen && <SearchOverlay onClose={() => ui.setSearchOpen(false)} />}
       <EstimateFirstHost />

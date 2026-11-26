@@ -1,3 +1,4 @@
+import { isMobileNow, isNative } from '../lib/native';
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
@@ -128,10 +129,10 @@ export function Engine() {
 
   // offer Windows notifications once, with a gentle snackbar
   useEffect(() => {
-    if (typeof Notification === 'undefined' || Notification.permission !== 'default') return;
+    if (isNative || typeof Notification === 'undefined' || Notification.permission !== 'default') return;
     const id = setTimeout(() => {
       if (!once('ot-asked-notif')) return;
-      toast.show('Turn on Windows notifications so reminders reach you while you work.', { icon: 'bell', duration: 15000, action: { label: 'Turn on', onClick: () => Notification.requestPermission() } });
+      toast.show(isMobileNow() ? 'Turn on notifications so reminders reach you.' : 'Turn on Windows notifications so reminders reach you while you work.', { icon: 'bell', duration: 15000, action: { label: 'Turn on', onClick: () => Notification.requestPermission() } });
     }, 2500);
     return () => clearTimeout(id);
   }, [toast]);

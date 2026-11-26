@@ -3,7 +3,7 @@ import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
 import type { Step, Task } from '../lib/types';
 import { Icon, type IconName } from '../ui/Icon';
-import { Btn, IBtn, MenuList, Pill, Popover, Switch, Tag, cx, useAnchor } from '../ui/kit';
+import { Btn, IBtn, MenuList, Pill, Popover, Switch, Tag, cx, useAnchor, PopOutBtn } from '../ui/kit';
 import { DuePicker, EstimateDialog } from '../ui/pickers';
 import { TimeLog } from './timelog';
 import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot } from './tasks';
@@ -100,7 +100,7 @@ export function TaskDrawer({ t }: { t: Task }) {
                 })()}
               </div>
               {!!t.estimateMin && <IBtn icon="swap" label={st.settings.timerDirection === 'up' ? 'Count down from the estimate' : 'Count up to the estimate'} onClick={() => st.updateSettings({ timerDirection: st.settings.timerDirection === 'up' ? 'down' : 'up' })} />}
-              <IBtn icon="pip" label="Pop out mini timer" onClick={() => mini.open()} />
+              <PopOutBtn onClick={() => mini.open()} />
               {running ? <IBtn icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" kind="pc" onClick={() => act.start(t)} />}
               <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
             </div>

@@ -3,7 +3,7 @@ import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
 import type { Project, Task, ID, Settings } from '../lib/types';
 import { Icon } from '../ui/Icon';
-import { Btn, Chip, Field, IBtn, MenuList, Popover, Switch, Tag, cx, useAnchor, type MenuItemDef, TONES } from '../ui/kit';
+import { Btn, Chip, Field, IBtn, MenuList, Popover, Switch, Tag, cx, useAnchor, type MenuItemDef, TONES, PopOutBtn } from '../ui/kit';
 import { DuePicker, EstimateDialog, DateTimePicker, remindOptions } from '../ui/pickers';
 import { useToast } from '../ui/Toast';
 import {
@@ -233,7 +233,7 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
       <div className="row gap-8">
         {!!t.estimateMin && <IBtn icon="swap" label={dir === 'up' ? 'Count down from the estimate' : 'Count up to the estimate'} onClick={() => st.updateSettings({ timerDirection: dir === 'up' ? 'down' : 'up' })} />}
         {amber && running && <Btn kind="warn-outlined" icon="edit" onClick={() => ui.openWhatHappened(t.id)}>What happened?</Btn>}
-        <IBtn icon="pip" label="Pop out mini timer" onClick={onPopOut} />
+        <PopOutBtn onClick={onPopOut} />
         {running ? <IBtn icon="pause" label="Pause" onClick={() => act.pause(t)} /> : <IBtn icon="play" label="Resume" onClick={() => act.start(t)} />}
         <Btn kind={amber ? 'warn' : 'filled'} icon="check" onClick={() => act.finish(t)}>Done</Btn>
       </div>

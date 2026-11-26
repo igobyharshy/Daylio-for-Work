@@ -7,3 +7,7 @@ dist
 .DS_Store
 /test-shots
 /tools/ui-test/shots
+
+# Android signing keys never go in git
+*.keystore
+*.jks

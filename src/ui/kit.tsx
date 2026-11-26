@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSP
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icon';
 import type { Tone } from '../lib/types';
+import { useIsMobile } from '../lib/native';
 
 const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ');
 export { cx };
@@ -161,8 +162,11 @@ export function Popover({ anchor, onClose, placement = 'below-start', gap = 4, c
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  // phones: menus and pickers open as a bottom sheet (anchored suggestion lists stay anchored)
+  const asSheet = useIsMobile() && closeOnOutside;
   useEsc(onClose);
   useLayoutEffect(() => {
+    if (asSheet) return;
     const place = () => {
       const el = ref.current; if (!el || !anchor) return;
       const a = anchor instanceof HTMLElement ? anchor.getBoundingClientRect() : { left: anchor.x, top: anchor.y, width: anchor.w ?? 0, height: anchor.h ?? 0, right: anchor.x + (anchor.w ?? 0), bottom: anchor.y + (anchor.h ?? 0) };
@@ -186,7 +190,7 @@ export function Popover({ anchor, onClose, placement = 'below-start', gap = 4, c
     if (ref.current) ro.observe(ref.current);
     window.addEventListener('resize', place);
     return () => { ro.disconnect(); window.removeEventListener('resize', place); };
-  }, [anchor, placement, gap]);
+  }, [anchor, placement, gap, asSheet]);
   useEffect(() => {
     if (!closeOnOutside) return;
     const h = (e: PointerEvent) => {
@@ -205,6 +209,12 @@ export function Popover({ anchor, onClose, placement = 'below-start', gap = 4, c
     const id = setTimeout(() => document.addEventListener('pointerdown', h), 0);
     return () => { clearTimeout(id); document.removeEventListener('pointerdown', h); };
   }, [anchor, onClose, closeOnOutside]);
+  if (asSheet) return createPortal(
+    <div ref={ref} className={cx('popover as-sheet', className)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet-panel"><span className="sheet-grab" aria-hidden />{children}</div>
+    </div>,
+    document.body,
+  );
   return createPortal(
     <div ref={ref} className={cx('popover', className)} style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, ...style }}>{children}</div>,
     document.body,
@@ -257,8 +267,10 @@ export function useAnchor<T extends HTMLElement = HTMLElement>() {
 
 export function Dialog({ onClose, children, width = 560, className, top, label }: { onClose: () => void; children: ReactNode; width?: number; className?: string; top?: boolean; label?: string }) {
   useEsc(onClose);
+  const mobile = useIsMobile();
+  const outside = (e: React.SyntheticEvent) => { if (e.target === e.currentTarget) onClose(); };
   return createPortal(
-    <div className={cx('scrim', top && 'top')} onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={cx('scrim', top && 'top')} onPointerDown={mobile ? undefined : outside} onClick={mobile ? outside : undefined}>
       <div className={cx('dialog', className)} role="dialog" aria-modal aria-label={label} style={{ width }}>{children}</div>
     </div>,
     document.body,
@@ -315,4 +327,10 @@ export function Empty({ icon, title, body, action }: { icon: IconName; title: st
       {action}
     </div>
   );
+}
+
+/** Pop-out mini timer on desktop; on phones the same button opens the full-screen focus timer. */
+export function PopOutBtn({ onClick, sm }: { onClick: () => void; sm?: boolean }) {
+  const m = useIsMobile();
+  return <IBtn sm={sm} icon={m ? 'fullscreen' : 'pip'} label={m ? 'Focus mode' : 'Pop out mini timer'} onClick={onClick} />;
 }

@@ -1,0 +1,97 @@
+# Builds the Ontrack Android app (APK) and publishes it as a GitHub release.
+# Stable download link: https://github.com/igobyharshy/Daylio-for-Work/releases/latest/download/Ontrack.apk
+#
+# The app loads the live web app, so ordinary web changes reach phones without a new APK.
+# This only rebuilds when the Android shell itself changes (or when run by hand).
+#
+# Optional, for seamless updates (install over the old app without uninstalling): add repo secrets
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+# Without them each build is signed with a fresh key, so installing a newer APK needs an uninstall first
+# (nothing is lost: all data lives in your Ontrack account).
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'native-shell/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-app
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install
+        run: npm ci
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Signing key
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > android/app/ontrack.keystore
+          else
+            keytool -genkeypair -v -keystore android/app/ontrack.keystore -alias ontrack -keyalg RSA -keysize 2048 \
+              -validity 10000 -storepass ontrack -keypass ontrack -dname "CN=Ontrack, O=Harshy"
+          fi
+
+      - name: Build APK
+        working-directory: android
+        env:
+          ONTRACK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'ontrack' }}
+          ONTRACK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'ontrack' }}
+          ONTRACK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || 'ontrack' }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Collect
+        run: cp android/app/build/outputs/apk/release/app-release.apk Ontrack.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ontrack-android
+          path: Ontrack.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ github.run_number }}
+          name: Ontrack for Android (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: Ontrack.apk
+          body: |
+            Install on your phone: open this page on Android, tap **Ontrack.apk**, then allow installs from your browser if asked.
+            The app opens the live Ontrack, so it stays in sync with the web app and updates itself with every web release.
