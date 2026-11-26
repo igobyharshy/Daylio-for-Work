@@ -14,6 +14,7 @@ import {
   MONTHS, addDays, atTime, cap, dueAt, elapsed, fmtClock, fmtDayComma, fmtDayLong, fmtDayShort, fmtMin, isoDate, outcome, parseDate, relDay, todayISO, totalEstimateMin,
 } from '../lib/time';
 import { SampleBanner } from './common';
+import { useIsMobile } from '../lib/native';
 
 // ---------- shared bits ----------
 export function TagAdder({ value, onChange }: { value: string[]; onChange: (tags: string[]) => void }) {
@@ -53,9 +54,9 @@ export function LinkedTasks({ value, onChange, bg }: { value: ID[]; onChange: (i
   const wrap = useRef<HTMLDivElement>(null);
   const results = q.trim() ? st.tasks.filter(t => t.title.toLowerCase().includes(q.toLowerCase())).sort((a, b) => Number(!!a.finishedAt) - Number(!!b.finishedAt)).slice(0, 6) : [];
   return (
-    <div className="row gap-8" style={{ flexWrap: 'wrap', flex: 1 }}>
+    <div className="row gap-8" style={{ flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
       {value.map(id => { const t = st.taskById(id); return t ? <Chip key={id} icon="link" tone={['var(--secondary-container)', 'var(--on-secondary-container)']} onRemove={() => onChange(value.filter(x => x !== id))}>{t.title}</Chip> : null; })}
-      <div ref={wrap} style={{ width: 240 }}>
+      <div ref={wrap} style={{ width: 240, maxWidth: '100%' }}>
         <Field sm lead="search" value={q} onChange={setQ} placeholder="Search tasks…" bg={bg} onBlur={() => setTimeout(() => setFocus(false), 150)}
           onKeyDown={e => { if (e.key === 'Enter' && results[0]) { if (!value.includes(results[0].id)) onChange([...value, results[0].id]); setQ(''); } }}
           inputRef={(el: HTMLInputElement | null) => { if (el) el.onfocus = () => setFocus(true); }} />
@@ -333,6 +334,7 @@ export function JournalPage() {
   const entries = st.entries.filter(e => (!tags.length || tags.some(t => e.tags.includes(t))) && (!ql || e.body.toLowerCase().includes(ql))).sort((a, b) => b.whenAt.localeCompare(a.whenAt));
   const tagCount = (t: string) => st.entries.filter(e => e.tags.includes(t)).length;
   const filtered = tags.length > 0 || !!ql;
+  const phone = useIsMobile();
   return (
     <>
       <div className="page-head">
@@ -340,13 +342,13 @@ export function JournalPage() {
         <div className="actions">
           {pending > 0 && <Btn kind="tonal" icon="review" onClick={() => nav('/journal/review')}>{pending} to reflect on</Btn>}
           <Seg value={view} onChange={v => st.updateSettings({ journalView: v })} items={[{ value: 'calendar', icon: 'calendar', tip: 'Calendar' }, { value: 'list', icon: 'list', tip: 'List' }]} />
-          <Btn icon="add" onClick={() => ui.newEntry({ source: 'manual' })}>New entry</Btn>
+          {!phone && <Btn icon="add" onClick={() => ui.newEntry({ source: 'manual' })}>New entry</Btn>}
         </div>
       </div>
       <SampleBanner />
       <CheckinBar />
       <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
-        <Field sm lead="search" value={q} onChange={setQ} placeholder="Search entries" style={{ width: 280 }} />
+        <Field sm lead="search" value={q} onChange={setQ} placeholder="Search entries" style={phone ? { flex: '1 1 160px' } : { width: 280 }} />
         <Chip icon="tag" trail="chevDown" sel={tags.length > 0} onClick={e => fa.open(e)}>{tags.length ? `Tags · ${tags.length}` : 'Tags'}</Chip>
         {tags.map(t => <Chip key={t} icon="tag" tone={tagChipTone(t)} onRemove={() => setTags(tags.filter(x => x !== t))}>{t}</Chip>)}
         {filtered && <span className="t-bs c-muted">{entries.length} of {st.entries.length} entries</span>}
@@ -358,6 +360,10 @@ export function JournalPage() {
         </Popover>
       )}
       {view === 'calendar' ? <JournalCalendar month={month} setMonth={setMonth} entries={entries} /> : <JournalList entries={entries} filtered={filtered} />}
+      {phone && <>
+        <div className="grow" />
+        <div className="fab-bar"><button className="fab state" onClick={() => ui.newEntry({ source: 'manual' })}><Icon name="add" />New entry</button></div>
+      </>}
     </>
   );
 }

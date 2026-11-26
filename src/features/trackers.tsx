@@ -320,25 +320,25 @@ export function TrackersSettings() {
     const l = all.slice(); const from = l.findIndex(x => x.id === id); const [x] = l.splice(from, 1); l.splice(l.findIndex(y => y.id === to), 0, x); save(l);
   };
   const row = (t: Tracker, i: number) => (
-    <div key={t.id} className="row gap-16" draggable onDragStart={() => setDrag(t.id)} onDragOver={e => e.preventDefault()} onDrop={() => { if (drag) move(drag, t.id); setDrag(null); }}
+    <div key={t.id} className="row gap-16 trk-row" draggable onDragStart={() => setDrag(t.id)} onDragOver={e => e.preventDefault()} onDrop={() => { if (drag) move(drag, t.id); setDrag(null); }}
       style={{ minHeight: 72, paddingRight: 8, borderTop: i ? '1px solid var(--outline-variant)' : undefined, opacity: drag === t.id ? 0.4 : 1 }}>
       <Icon name="drag" style={{ color: 'var(--outline)', cursor: 'grab' }} />
       <span style={{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: t.type === 'points' && t.higherIs === 'worse' ? 'var(--error-container)' : 'var(--secondary-container)', color: t.type === 'points' && t.higherIs === 'worse' ? 'var(--on-error-container)' : 'var(--on-secondary-container)' }}><Icon name={t.icon} /></span>
       <button className="col gap-2 grow" style={{ textAlign: 'left' }} onClick={() => setEdit(t)}><span className="t-tm">{t.name}</span><span className="t-bm c-muted">{describe(t)}</span></button>
-      <TrackerPreview t={t} />
+      <span className="trk-prev"><TrackerPreview t={t} /></span>
       {t.askOn !== 'checkin' && <span className="vpill"><Icon name={t.askOn === 'every' ? 'book' : 'tag'} />{t.askOn === 'every' ? 'Every entry' : `Tagged ${t.tags.join(', ') || '—'}`}</span>}
       <IBtn sm icon="more" label={`${t.name} options`} onClick={e => setMenu({ t, el: e.currentTarget as HTMLElement })} />
     </div>
   );
   return (
     <>
-      <div className="row gap-12">
+      <div className="row gap-12 trk-head">
         <div className="col gap-4 grow"><span className="t-tl">Journal trackers</span><span className="t-bm c-muted">Add your own scales and groups to the journal. All optional: each tracker only appears where you ask for it.</span></div>
         <Btn kind="outlined" icon="lightbulb" onClick={() => setAdding(true)}>Browse suggestions</Btn>
         <Btn icon="add" onClick={() => setAdding(true)}>Add tracker</Btn>
       </div>
       <section className="set-card" style={{ gap: 0, paddingBottom: 12 }}>
-        <div className="row gap-16" style={{ paddingBottom: 8 }}>
+        <div className="row gap-16 trk-sec-head" style={{ paddingBottom: 8 }}>
           <div className="col gap-4 grow"><span className="t-tm">Daily check-in</span><span className="t-bm c-muted">Asked once a day from the top of Journal. Good for things about the day, like sleep and energy. Skip it any time.</span></div>
           <Chip icon="alarm" trail="chevDown" onClick={e => ra.open(e)}>{st.settings.checkinRemind ? `Remind me · ${fmtTime(st.settings.checkinRemind)}` : 'No reminder'}</Chip>
         </div>
@@ -348,18 +348,18 @@ export function TrackersSettings() {
       <section className="set-card" style={{ gap: 0, paddingBottom: 12 }}>
         <div className="col gap-4" style={{ paddingBottom: 8 }}><span className="t-tm">On journal entries</span><span className="t-bm c-muted">Asked inside an entry: on every entry, or only when it has a certain tag.</span></div>
         {onEntries.map(row)}
-        <div className="row gap-16" style={{ minHeight: 72, paddingRight: 8, borderTop: onEntries.length ? '1px solid var(--outline-variant)' : undefined }}>
-          <span style={{ width: 24 }} />
+        <div className="row gap-16 trk-row trk-tags" style={{ minHeight: 72, paddingRight: 8, borderTop: onEntries.length ? '1px solid var(--outline-variant)' : undefined }}>
+          <span className="trk-spacer" style={{ width: 24 }} />
           <span style={{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--secondary-container)', color: 'var(--on-secondary-container)' }}><Icon name="tag" /></span>
           <button className="col gap-2 grow" style={{ textAlign: 'left' }} onClick={() => nav('/settings/default-tags')}><span className="t-tm">Tags</span><span className="t-bm c-muted">Group · built-in · edit in Default tags</span></button>
-          <div className="row gap-6">{st.settings.journalTags.slice(0, 2).map(t => { const tone = tagChipTone(t); return <span key={t} className="vpill" style={tone ? { background: tone[0], color: tone[1] } : undefined}>{t}</span>; })}{st.settings.journalTags.length > 2 && <span className="vpill">+{st.settings.journalTags.length - 2}</span>}</div>
+          <div className="row gap-6 trk-prev">{st.settings.journalTags.slice(0, 2).map(t => { const tone = tagChipTone(t); return <span key={t} className="vpill" style={tone ? { background: tone[0], color: tone[1] } : undefined}>{t}</span>; })}{st.settings.journalTags.length > 2 && <span className="vpill">+{st.settings.journalTags.length - 2}</span>}</div>
           <span className="vpill"><Icon name="book" />Every entry</span>
           <span style={{ width: 32 }} />
         </div>
       </section>
       {archived.length > 0 && (
         <div className="col gap-8">
-          <button className="row gap-8 state" style={{ alignSelf: 'flex-start', padding: 4, borderRadius: 8 }} onClick={() => setShowArchived(!showArchived)}>
+          <button className="row gap-8 state trk-arch" style={{ alignSelf: 'flex-start', padding: 4, borderRadius: 8 }} onClick={() => setShowArchived(!showArchived)}>
             <Icon name={showArchived ? 'chevDown' : 'chevRight'} size={20} /><span className="t-ts c-muted">Archived ({archived.length})</span>
             {!showArchived && <span className="t-bm c-faint">·  {archived.map(a => a.name).join(', ')}. Hidden from new entries, still kept in Insights.</span>}
           </button>

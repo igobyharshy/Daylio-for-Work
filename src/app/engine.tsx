@@ -1,4 +1,4 @@
-import { isMobileNow, isNative } from '../lib/native';
+import { isMobileNow, isNative, nativeNotifyNow } from '../lib/native';
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
@@ -40,7 +40,11 @@ export function Engine() {
       const { st } = ref.current;
       st.addNotif(n);
       const quiet = st.settings.notif.quietOutsideWorkDay && !inWorkDay(st.settings);
-      if (windows && !quiet && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      // Android app: reminders and the estimate alert are scheduled natively ahead of time (they fire even when
+      // the app is closed), so only the in-the-moment ones are sent from here.
+      if (isNative) {
+        if (windows && !quiet && !tag.startsWith('remind-') && !tag.startsWith('over-')) nativeNotifyNow(n.title, n.body, { taskId: n.taskId ?? null, kind: n.kind });
+      } else if (windows && !quiet && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         try {
           const w = new Notification(n.title, { body: n.body, icon: '/icon-192.png', tag, requireInteraction: n.kind !== 'info' });
           w.onclick = () => { window.focus(); onClick(); w.close(); };

@@ -30,6 +30,24 @@
 - Plan line is one short outlined line ("1 more task due today · Plan").
 - Timeline on phones: no legend, "To plan" is a plain list (no drag grip; the clock button plans it in the next free slot).
 
+## Round 3 — full phone UI test + fixes (26 Nov, evening)
+Tested with `tools/ui-test/mobile-deep.mjs` (≈90 steps: every page, sheet, picker and menu; touch long-press, drag, swipe; light + dark).
+- **Date pickers** in sheets use the full width (7 even columns, 40 px days). The composer's picker shows the date typed ("tomorrow").
+- **Add task** on phones is a composer pinned above the keyboard: title + send button, one scrollable chip row; list dimmed behind.
+  The nav bar and mini player hide while the keyboard is up (`html.kb`). Tapping outside no longer taps through to the row underneath.
+- **Now card:** tapping the task opens the task; only the Focus button opens focus.
+- **Task drawer (phone):** "Start timer" block for tasks not started yet; ⋮ task menu in the header; timer block wraps (time, then buttons).
+- **Touch drag:** long-press (~0.4 s) a row or board card to pick it up, then drag to reorder or move between groups/columns.
+  A long-press without moving opens the task menu. Normal swipes still scroll. Board auto-scrolls sideways while dragging.
+- **Timeline bug (all narrow screens ≤900 px):** the card grew to its full content width, so it couldn't scroll sideways and
+  "now" was off-screen. Fixed. Phones: 112 px name column, 72 px hours, timeline above "To plan".
+  Tapping a bar no longer "clicks" whatever opens under the finger; a cancelled touch no longer opens the task.
+- Snackbars move to the top while a sheet, dialog or the composer is open.
+- Project page: big name with ⋮ beside it; progress · filter · view below. Journal: "New entry" is a FAB; search fits; linked-tasks field fits.
+- Insights cards and Settings cards stack; Trackers settings readable; notification banner wraps.
+- **Android app notifications:** task reminders are scheduled on the phone (ring even when the app is closed; tap opens the task);
+  check-in / reflection / nudges send a phone notification; Settings → Notifications asks Android for permission and says "Phone notifications".
+
 ## Focus timer (`src/features/focus.tsx`)
 - On phones the pop-out button (`PopOutBtn`) becomes **Focus mode** (fullscreen icon). Also opens from the mini player
   and from the timer notification.

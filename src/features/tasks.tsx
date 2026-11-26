@@ -181,6 +181,14 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   const calm = (st.settings.rowDetails ?? 'hover') === 'hover';
   // phones: no hover, so calm rows show one quiet line with the single thing that matters right now
   const phone = useIsMobile() && calm;
+  // touch: a long press that doesn't turn into a drag opens the task menu
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = rowRef.current; if (!el) return;
+    const h = () => ma.open(el);
+    el.addEventListener('ot-longpress', h);
+    return () => el.removeEventListener('ot-longpress', h);
+  }, [phone]); // eslint-disable-line react-hooks/exhaustive-deps
   const keepChip = running || (!done && t.elapsedMs > 0);
   const overdue = !done && !!t.dueDate && isOverdue(t, st.settings, now);
   const meta: ReactNode[] = [];
@@ -193,8 +201,9 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   if (!done && t.remindAt && !t.remindedAt) meta.push(<span className="m" data-tip={`Reminder ${relDay(isoDate(new Date(t.remindAt)))} ${fmtClock(t.remindAt)}`}><Icon name="bell" /></span>);
 
   if (phone) return (
-    <div className={cx('task-row phone', done && 'done', amber && 'amber', running && 'live', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
-      onClick={() => ui.openTask(t.id)} onContextMenu={e => { e.preventDefault(); ma.open(e.currentTarget as HTMLElement); }} data-task={t.id}>
+    <div ref={rowRef} className={cx('task-row phone', done && 'done', amber && 'amber', running && 'live', ui.taskId === t.id && 'sel', isFlash && 'flash')} {...drag}
+      onClick={() => ui.openTask(t.id)} data-task={t.id}
+      onContextMenu={e => { e.preventDefault(); if (!drag || (e.nativeEvent as PointerEvent).pointerType === 'mouse') ma.open(e.currentTarget as HTMLElement); }}>
       <button className={cx('check', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'}
         onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
         <Icon name={done ? 'checkCircle' : 'circle'} />
@@ -264,7 +273,7 @@ export function RunCard({ t, onPopOut }: { t: Task; onPopOut: () => void }) {
   // phones: just the task, its time and three buttons; the rest lives in the task and the focus timer
   if (phone) return (
     <div className={cx('run-card phone', amber && 'amber')}>
-      <button className="rc-top" onClick={onPopOut} aria-label="Open focus timer">
+      <button className="rc-top" onClick={() => ui.openTask(t.id)} aria-label={`Open ${t.title}`}>
         <span className="col grow" style={{ minWidth: 0, gap: 2, textAlign: 'left' }}>
           <span className="t-tl clamp2">{t.title}</span>
           <span className="t-bs rc-sub">{!running ? 'Paused' : t.estimateMin && rem > 0 ? `done by ${fmtClock(new Date(now + rem))}` : amber ? 'over the estimate' : 'no estimate'}</span>
@@ -428,11 +437,12 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   const [estOpen, setEstOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const phone = useIsMobile();
   const project = st.projectById(proj ?? st.inbox?.id);
   const parsed = useMemo(() => parseQuickAdd(title), [title]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   useEffect(() => {
-    if (!open) return;
+    if (!open || phone) return; // phones: the composer's scrim handles outside taps (no tap-through)
     const h = (e: PointerEvent) => {
       const t = e.target as HTMLElement;
       if (wrapRef.current?.contains(t) || t.closest('.popover') || t.closest('.scrim')) return;
@@ -440,7 +450,7 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
     };
     document.addEventListener('pointerdown', h);
     return () => document.removeEventListener('pointerdown', h);
-  }, [open, title]);
+  }, [open, title, phone]);
   // the project stays as picked for the next task (handy when adding several)
   const reset = () => { setTitle(''); setEst(null); setRemind(null); setDue({ date: todayISO(), time: null }); };
   const submit = () => {
@@ -465,6 +475,36 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   const effDate = parsed.date ?? due.date;
   const dueText = effDate ? cap(dueLabel({ dueDate: effDate, dueTime: parsed.date ? null : due.time })!) : 'No due date';
   const effEst = parsed.estimate ?? est;
+  const pickers = <>
+      {pa.isOpen && <ProjectPicker anchor={pa.el} value={proj ?? st.inbox?.id ?? null} onPick={setProj} onClose={pa.close} />}
+      {da.isOpen && <Popover anchor={da.el} onClose={da.close}><DuePicker date={parsed.date ?? due.date} time={parsed.date ? null : due.time} onDone={(date, time) => { setDue({ date, time }); da.close(); }} onClear={() => { setDue({ date: null, time: null }); da.close(); }} /></Popover>}
+      {ra.isOpen && <RemindPicker anchor={ra.el} onClose={ra.close} t={{ dueDate: due.date, dueTime: due.time }} value={remind} onPick={setRemind} />}
+      {estOpen && <EstimateDialog initial={parsed.estimate ?? est} onSet={setEst} onClose={() => setEstOpen(false)} dueAt={dueAt({ dueDate: due.date, dueTime: due.time }, st.settings)} avgOverrunMin={avgOverrunMin(st.tasks)} />}
+  </>;
+  // phones: a composer pinned above the keyboard — the title, one row of chips, a send button
+  if (phone) return (
+    <>
+      <div className="add-scrim" onClick={() => setOpen(false)} />
+      <div className="add-panel phone" ref={wrapRef}>
+        <div className="line">
+          <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="Add a task" aria-label="Task title" enterKeyHint="send"
+            onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setOpen(false); }} />
+          <button className="send" aria-label="Add task" disabled={!parsed.title.trim()} onPointerDown={e => e.preventDefault()} onClick={submit}><Icon name="arrowUp" /></button>
+        </div>
+        {(parsed.date || parsed.estimate)
+          ? <div className="hint">Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(' and ')}.</div>
+          : !title && <div className="hint">Tip: type “Write brief tomorrow 45m” to set the day and estimate.</div>}
+        <div className="chips">
+          {!projectId && <Chip emoji={project?.emoji} onClick={e => pa.open(e)}>{project?.name ?? 'Inbox'}</Chip>}
+          <Chip icon="event" sel={!!effDate} onClick={e => da.open(e)}>{dueText}</Chip>
+          <Chip icon="hourglass" sel={!!effEst} onClick={() => setEstOpen(true)}>{effEst ? fmtMin(effEst) : 'Estimate'}</Chip>
+          <Chip icon="bell" sel={!!remind} onClick={e => ra.open(e)}>{remind ? `${cap(relDay(isoDate(new Date(remind))))} ${fmtClock(remind)}` : 'Remind'}</Chip>
+          {!inMyDay && <Chip icon={myDay ? 'sunFill' : 'sun'} sel={myDay} onClick={() => setMyDay(!myDay)}>My Day</Chip>}
+        </div>
+        {pickers}
+      </div>
+    </>
+  );
   return (
     <div className="add-panel" ref={wrapRef}>
       <div className="line">
@@ -484,10 +524,7 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
         <Btn disabled={!parsed.title.trim()} onClick={submit}>Add</Btn>
       </div>
       {(parsed.date || parsed.estimate) && <div className="t-bs c-muted" style={{ paddingLeft: 36 }}>Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(' and ')}.</div>}
-      {pa.isOpen && <ProjectPicker anchor={pa.el} value={proj ?? st.inbox?.id ?? null} onPick={setProj} onClose={pa.close} />}
-      {da.isOpen && <Popover anchor={da.el} onClose={da.close}><DuePicker date={due.date} time={due.time} onDone={(date, time) => { setDue({ date, time }); da.close(); }} onClear={() => { setDue({ date: null, time: null }); da.close(); }} /></Popover>}
-      {ra.isOpen && <RemindPicker anchor={ra.el} onClose={ra.close} t={{ dueDate: due.date, dueTime: due.time }} value={remind} onPick={setRemind} />}
-      {estOpen && <EstimateDialog initial={est} onSet={setEst} onClose={() => setEstOpen(false)} dueAt={dueAt({ dueDate: due.date, dueTime: due.time }, st.settings)} avgOverrunMin={avgOverrunMin(st.tasks)} />}
+      {pickers}
     </div>
   );
 }
@@ -535,6 +572,36 @@ function BoardCard({ t, showProject, now, drag, onOpen, act }: { t: Task; showPr
   const amber = !done && isOverEstimate(t, now);
   const running = !!t.runStartedAt;
   const ma = useAnchor();
+  const phone = useIsMobile() && (st.settings.rowDetails ?? 'hover') === 'hover';
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = cardRef.current; if (!el) return;
+    const h = () => ma.open(el);
+    el.addEventListener('ot-longpress', h);
+    return () => el.removeEventListener('ot-longpress', h);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // phones: same calm content as the list rows (long-press for the menu)
+  if (phone) return (
+    <div ref={cardRef} className={cx('kcard phone', amber && 'amber', ui.taskId === t.id && 'sel', running && 'running', done && 'done')} {...drag} onClick={onOpen}
+      onContextMenu={e => { e.preventDefault(); if ((e.nativeEvent as PointerEvent).pointerType === 'mouse') ma.open(e.currentTarget as HTMLElement); }}>
+      <div className="row gap-4" style={{ alignItems: 'flex-start' }}>
+        <button className={cx('check sm', done && 'on', amber && 'amber')} aria-label={done ? 'Mark not done' : 'Mark done'} onClick={e => { e.stopPropagation(); act.toggleDone(t); }}>
+          <Icon name={done ? 'checkCircle' : 'circle'} size={22} />
+        </button>
+        <span className="col grow" style={{ minWidth: 0, gap: 2, paddingTop: 6 }}>
+          <span className={cx('kc-title clamp2', done && 'c-muted')} style={{ textDecoration: done ? 'line-through' : undefined }}>{t.title}</span>
+          <PhoneLine t={t} now={now} overdue={!done && !!t.dueDate && isOverdue(t, st.settings, now)} />
+        </span>
+        {!done && (
+          <span className="row" style={{ alignItems: 'center', paddingTop: 2 }} onClick={e => e.stopPropagation()}>
+            {!running && !t.elapsedMs && !!t.estimateMin && <span className="est">{fmtMin(totalEstimateMin(t))}</span>}
+            {running ? <IBtn icon="pause" kind="pc" label="Pause" tip={false} onClick={() => act.pause(t)} /> : <IBtn icon="play" kind={t.elapsedMs ? 'pc' : 'standard'} className="play" label={t.elapsedMs ? 'Resume' : 'Start timer'} tip={false} onClick={() => act.start(t)} />}
+          </span>
+        )}
+      </div>
+      {ma.isOpen && <TaskMenu t={t} anchor={ma.el} onClose={ma.close} />}
+    </div>
+  );
   return (
     <div className={cx('kcard', amber && 'amber', ui.taskId === t.id && 'sel', running && 'running')} {...drag} onClick={onOpen}>
       <div className="row gap-4" style={{ alignItems: 'flex-start' }}>

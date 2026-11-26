@@ -8,6 +8,7 @@ import { Btn, Chip, Confirm, Dialog, Field, IBtn, MenuList, Pill, Popover, Switc
 import { TimeInput } from '../ui/pickers';
 import { useToast } from '../ui/Toast';
 import { tagChipTone, tagDot } from '../lib/select';
+import { isMobileNow, isNative, useNotifPermission } from '../lib/native';
 import { fmtHHMM } from '../lib/time';
 import { TrackersSettings } from './trackers';
 
@@ -230,19 +231,22 @@ function Notifications() {
   const n = st.settings.notif;
   const set = (k: keyof typeof n) => (v: boolean) => st.updateSettings({ notif: { ...n, [k]: v } });
   const nav = useNavigate();
-  const [perm, setPerm] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
-  const ask = async () => { if (typeof Notification === 'undefined') return; setPerm(await Notification.requestPermission()); };
+  const [perm, ask] = useNotifPermission();
+  // wording: Windows on the PC, the phone in the Android app / phone browser
+  const phone = isNative || isMobileNow();
+  const where = phone ? 'on your phone' : 'in Windows';
+  const sysName = phone ? 'Phone notifications' : 'Windows notifications';
   return (
     <>
       {perm !== 'granted' && (
-        <div className="row gap-16" style={{ background: perm === 'denied' ? 'var(--error-container)' : 'var(--primary-container)', color: perm === 'denied' ? 'var(--on-error-container)' : 'var(--on-primary-container)', borderRadius: 16, padding: '12px 12px 12px 20px' }}>
+        <div className="row gap-16 notif-banner" style={{ background: perm === 'denied' ? 'var(--error-container)' : 'var(--primary-container)', color: perm === 'denied' ? 'var(--on-error-container)' : 'var(--on-primary-container)', borderRadius: 16, padding: '12px 12px 12px 20px' }}>
           <Icon name={perm === 'denied' ? 'bellOff' : 'bell'} />
-          <span className="t-bm grow">{perm === 'denied' ? 'Windows notifications are blocked for Ontrack. Allow them from the lock icon in the address bar, then reload.' : 'Allow notifications so reminders show up in Windows, even when Ontrack is in the background.'}</span>
+          <span className="t-bm grow">{perm === 'denied' ? (isNative ? 'Notifications are off for Ontrack. Turn them on in Android Settings → Apps → Ontrack → Notifications.' : `${sysName} are blocked for Ontrack. Allow them from the lock icon in the address bar, then reload.`) : `Allow notifications so reminders show up ${where}, even when Ontrack is in the background.`}</span>
           {perm === 'default' && <Btn onClick={ask}>Allow notifications</Btn>}
         </div>
       )}
       <div className="row gap-24" style={{ alignItems: 'flex-start' }}>
-        <div className="grow" style={{ flexBasis: 0 }}><Card title="Windows notifications" sub="Shown while Ontrack is open, even minimised.">
+        <div className="grow" style={{ flexBasis: 0 }}><Card title={sysName} sub={isNative ? 'Reminders and the estimate alert arrive even when the app is closed.' : 'Shown while Ontrack is open, even minimised.'}>
           <Row label="Task reminder" sub="When a task’s reminder time arrives"><Switch on={n.taskReminder} onChange={set('taskReminder')} label="Task reminder" /></Row>
           <Row label="Estimate used up" sub="When the timer reaches your estimate"><Switch on={n.estimateUsedUp} onChange={set('estimateUsedUp')} label="Estimate used up" /></Row>
           <Row label="Reflection reminder" sub="At end of day, if tasks need a note"><Switch on={n.reflectionReminder} onChange={set('reflectionReminder')} label="Reflection reminder" /></Row>
@@ -255,7 +259,7 @@ function Notifications() {
             <Row label="Sound" sub="Play a short chime with notifications"><Switch on={n.sound} onChange={set('sound')} label="Sound" /></Row>
           </Card>
           <Card title="Quiet hours">
-            <Row label="Outside your work day" sub={`${fmtHHMM(st.settings.workStart)} – ${fmtHHMM(st.settings.workEnd)} · no Windows notifications`}><Switch on={n.quietOutsideWorkDay} onChange={set('quietOutsideWorkDay')} label="Quiet outside work day" /></Row>
+            <Row label="Outside your work day" sub={`${fmtHHMM(st.settings.workStart)} – ${fmtHHMM(st.settings.workEnd)} · no ${phone ? 'phone' : 'Windows'} notifications`}><Switch on={n.quietOutsideWorkDay} onChange={set('quietOutsideWorkDay')} label="Quiet outside work day" /></Row>
             <div><Btn kind="text" trail="chevRight" onClick={() => nav('/settings/work-day')}>Change work day hours</Btn></div>
           </Card>
         </div>

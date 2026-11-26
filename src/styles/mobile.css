@@ -157,7 +157,6 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
     padding: 0 0 calc(var(--sab) + 8px); display: flex; flex-direction: column; align-items: center; box-shadow: var(--elev-3); animation: sheet-up 240ms var(--ease-emph); }
   .as-sheet .sheet-grab { flex: none; width: 32px; height: 4px; border-radius: 2px; background: var(--on-surface-variant); opacity: 0.4; margin: 14px auto 8px; }
   .as-sheet .sheet-panel > * { width: 100% !important; max-width: 600px; background: transparent; box-shadow: none; border-radius: 0; max-height: none; overflow: visible; animation: none; flex: none; }
-  .as-sheet .sheet-panel > .menu.picker, .as-sheet .sheet-panel > .cal { width: max-content !important; }
   .as-sheet .menu { padding-top: 0; }
 
   /* search: full screen */
@@ -254,4 +253,117 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .tl-chip { min-height: 56px; padding: 6px 4px 6px 14px; border-radius: 16px; background: var(--surface-low); cursor: default; }
   .tl-chip > .icon:first-child { display: none; }
   .tl-chip .t-bm { font-size: 15px; line-height: 21px; }
+}
+
+/* ---------- round 3 (26 Nov evening): pickers, composer, keyboard ---------- */
+@media (max-width: 720px) {
+  /* date pickers in sheets use the full width: big, evenly spaced days */
+  .as-sheet .menu.picker { padding: 4px 20px 12px !important; gap: 12px !important; }
+  .as-sheet .menu.picker > .t-lm { font: 500 16px/24px var(--font); color: var(--on-surface); padding: 0 4px !important; }
+  .as-sheet .cal-head { height: 48px; padding-left: 0; }
+  .as-sheet .cal-head .t-ll { font: 500 15px/20px var(--font); color: var(--on-surface); padding: 0 4px !important; }
+  .as-sheet .cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 2px; }
+  .as-sheet .cal-dow { height: 32px; font: 500 12px/16px var(--font); color: var(--on-surface-variant); }
+  .as-sheet .cal-cell { width: auto; height: 44px; }
+  .as-sheet .cal-day { width: 40px; height: 40px; border-radius: 20px; font: 400 15px/20px var(--font); }
+  .as-sheet .cal-cell.range-start, .as-sheet .cal-cell.range-end { border-radius: 22px 0 0 22px; }
+  .as-sheet .cal-cell.range-end { border-radius: 0 22px 22px 0; }
+  .as-sheet .menu.picker .dialog-actions { padding-top: 4px; }
+  .as-sheet .menu.picker .chip { height: 36px; padding: 0 14px; }
+
+  /* add-task composer: pinned to the bottom (above the keyboard), list dimmed behind it */
+  .add-scrim { position: fixed; inset: 0; z-index: 44; background: var(--scrim); animation: fade 150ms var(--ease); }
+  .add-panel.phone { position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; border-radius: 24px 24px 0 0; background: var(--surface-container);
+    box-shadow: var(--elev-3); padding: 12px 12px calc(12px + var(--sab)); gap: 8px; animation: sheet-up 200ms var(--ease-emph); }
+  .add-panel.phone .line { min-height: 48px; gap: 8px; padding-left: 8px; }
+  .add-panel.phone .line input { font: 400 18px/24px var(--font); color: var(--on-surface); }
+  .add-panel.phone .send { flex: none; width: 44px; height: 44px; border-radius: 22px; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); }
+  .add-panel.phone .send:disabled { background: color-mix(in srgb, var(--on-surface) 12%, transparent); color: color-mix(in srgb, var(--on-surface) 38%, transparent); }
+  .add-panel.phone .send .icon { width: 22px; height: 22px; }
+  .add-panel.phone .hint { font: 400 12px/16px var(--font); color: var(--on-surface-variant); padding: 0 8px; }
+  .add-panel.phone .chips { flex-wrap: nowrap; overflow-x: auto; padding: 2px 4px; margin: 0 -12px; padding-left: 12px; padding-right: 12px; scrollbar-width: none; gap: 8px; }
+  .add-panel.phone .chips::-webkit-scrollbar { display: none; }
+  .add-panel.phone .chips .chip { flex: none; height: 36px; }
+
+  /* keyboard up: give it the room */
+  html.kb .m-nav, html.kb .m-player { display: none; }
+}
+@media (max-width: 720px) {
+  /* timeline first, then the tasks still to plan */
+  .tl-layout .tl-panel { order: 2; }
+  .tl-label { padding: 0 8px 0 10px; gap: 6px; }
+  .tl-label .icon { width: 16px; height: 16px; }
+  .tl-label .t-bm { font: 400 12px/16px var(--font); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tl-label .t-bs { display: none; }
+  .tl-row.add .tl-label .t-bs { display: inline; font-size: 12px; line-height: 16px; }
+  .tl-corner { padding: 0 8px 8px 10px; font-size: 11px; }
+  .tl-bar .h { width: 14px; }
+  .tl-panel > .row:first-child { padding: 4px 4px 0 4px !important; }
+}
+@media (max-width: 720px) {
+  /* drawer: start the timer from the task */
+  .start-block { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px 12px 12px; border-radius: 16px; background: var(--primary-container); color: var(--on-primary-container); text-align: left; }
+  .start-block .start-ic { width: 44px; height: 44px; border-radius: 22px; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); flex: none; }
+  .start-block .start-ic .icon { width: 24px; height: 24px; }
+  .start-block .c-muted { color: inherit; opacity: 0.75; }
+  /* drawer timer: time on top, buttons underneath */
+  .timer-block.phone > .row:first-child { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+  .timer-block.phone > .row:first-child > .col.grow { flex: 1 1 100%; }
+  .timer-block.phone .t-hs { font-size: 32px; line-height: 40px; }
+  /* the snackbar moves to the top while a sheet, dialog or the composer is open, so it never covers them */
+  body:has(.add-panel.phone, .popover.as-sheet, .scrim, .m-app .sheet) .snackbar { bottom: auto; top: calc(var(--sat) + 8px); }
+}
+@media (max-width: 720px) {
+  /* project page: name + ⋮ on one line, progress · filter · view underneath */
+  .page-head .title .inline-input.t-hm { font: 500 24px/32px var(--font); }
+  .page-head:has(.proj-actions) .title { flex: 1 1 calc(100% - 56px); }
+  .proj-actions { flex: 1 1 100%; justify-content: flex-start !important; gap: 8px !important; margin-left: 0 !important; }
+  .proj-actions > span[style*='width: 1px'] { margin: 0 4px; }
+  .proj-actions > .row.gap-12 { margin-right: auto; }
+  .breadcrumb { font-size: 13px; }
+}
+@media (max-width: 720px) {
+  /* extended FAB for the page's main action (Journal → New entry) */
+  .fab-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; pointer-events: none; padding-top: 8px; z-index: 5; }
+  .fab { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; height: 56px; padding: 0 20px 0 16px; border-radius: 16px;
+    background: var(--primary-container); color: var(--on-primary-container); font: 500 15px/20px var(--font); box-shadow: var(--elev-3); }
+  .fab .icon { width: 24px; height: 24px; }
+}
+@media (max-width: 720px) {
+  /* side-by-side cards with equal widths stack (Insights, Settings) */
+  .content .row:has(> .grow[style*='flex-basis: 0']) { flex-direction: column; align-items: stretch !important; }
+  .content .row:has(> .grow[style*='flex-basis: 0']) > .grow { flex-basis: auto !important; width: 100%; }
+  /* trackers settings */
+  .trk-head, .trk-sec-head { flex-wrap: wrap; }
+  .trk-head > .col, .trk-sec-head > .col { flex: 1 1 100%; }
+  .trk-row { gap: 10px !important; min-height: 64px !important; }
+  .trk-row > .icon:first-child, .trk-row .trk-prev { display: none; }
+  .trk-row .vpill { display: none; }
+  .trk-row .t-bm { font-size: 13px; line-height: 18px; }
+}
+@media (max-width: 720px) {
+  .kb-hint { display: none; }
+  .drag-ghost.lifted { transform: scale(1.03); transition: transform 120ms var(--ease); }
+  body.is-dragging { -webkit-user-select: none; user-select: none; }
+}
+@media (max-width: 720px) {
+  .kcard.phone { padding: 8px 4px 8px 6px; gap: 0; border-radius: 16px; min-height: 60px; }
+  .kcard.phone .kc-title { font: 400 15px/21px var(--font); }
+  .kcard.phone .line { font: 400 13px/18px var(--font); color: var(--on-surface-variant); }
+  .kcard.phone .line.primary { color: var(--primary); font-weight: 500; }
+  .kcard.phone .line.warn { color: var(--warning); font-weight: 500; }
+  .kcard.phone .line.err { color: var(--error); }
+  .kcard.phone .est { font: 500 13px/18px var(--font); color: var(--on-surface-variant); padding-left: 4px; }
+  .kcard.phone .ibtn.play { color: var(--primary); }
+  .kcard.phone .check { width: 36px; height: 36px; }
+}
+/* while dragging, sticky bars never block the drop target under the finger */
+body.is-dragging .bottom-bar, body.is-dragging .fab-bar, body.is-dragging .snackbar { pointer-events: none; }
+body.is-dragging .board { scroll-snap-type: none; }
+@media (max-width: 720px) {
+  .trk-tags .trk-spacer, .trk-tags > span[style*='width: 32'] { display: none; }
+  .trk-arch { flex-wrap: wrap; text-align: left; }
+  .notif-banner { flex-wrap: wrap; padding: 14px 16px !important; }
+  .notif-banner > .t-bm { flex: 1 1 calc(100% - 44px); }
+  .notif-banner > .btn { margin-left: auto; }
 }

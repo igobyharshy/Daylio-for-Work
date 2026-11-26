@@ -232,7 +232,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
                     {r.lead}
                     <span className="col grow" style={{ minWidth: 0 }}><span className="ellipsis t-bl">{r.title}</span><span className="sub ellipsis">{r.sub}</span></span>
                     {k === 'journal' && st.entries.find(e => e.id === r.id)?.tags.slice(0, 1).map(t => <Tag key={t} tone={tagChipTone(t)}>{t}</Tag>)}
-                    {my === i && <span className="t-ll c-muted">↵</span>}
+                    {my === i && <span className="t-ll c-muted kb-hint">↵</span>}
                   </button>
                 ); })}
               </div>

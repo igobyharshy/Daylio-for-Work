@@ -13,7 +13,8 @@ import { fmtClock, fmtMin, isDone, isOverEstimate, remainingMs, timerView, total
 import { useTaskActions } from '../features/tasks';
 import { useMiniTimer } from '../features/mini';
 import { NotificationsPanel, ProfileMenu } from './shell';
-import { isNative, setSystemBars } from '../lib/native';
+import { ensureNativeNotifs, isNative, notifIdFor, setSystemBars } from '../lib/native';
+import { archivedIds, isLive } from '../lib/select';
 
 /** M3 small top app bar: brand, search, notifications, account. Page titles stay in the page. */
 export function MobileTopBar() {
@@ -41,6 +42,7 @@ export function MobileTopBar() {
 /** M3 navigation bar: the four pages, with My Day's to-do count and Journal's reflections. */
 export function BottomNav() {
   const st = useStore();
+  useKeyboardClass();
   const loc = useLocation();
   const left = myDayTasks(st.tasks, st.projects).filter(t => !isDone(t)).length;
   const reflect = needsReflection(st.tasks).length;
@@ -63,6 +65,18 @@ export function BottomNav() {
       })}
     </nav>
   );
+}
+
+/** While typing, the keyboard needs the room: <html class="kb"> hides the nav bar and mini player. */
+function useKeyboardClass() {
+  useEffect(() => {
+    const typing = (el: Element | null) => !!el && (el.matches('textarea, [contenteditable=true], input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button])'));
+    const sync = () => document.documentElement.classList.toggle('kb', typing(document.activeElement));
+    const later = () => setTimeout(sync, 0);
+    document.addEventListener('focusin', sync);
+    document.addEventListener('focusout', later);
+    return () => { document.removeEventListener('focusin', sync); document.removeEventListener('focusout', later); document.documentElement.classList.remove('kb'); };
+  }, []);
 }
 
 /** Mini player above the navigation bar while a timer runs (My Day has the big Now card instead).
@@ -123,6 +137,8 @@ export function NativeBridge() {
     const back = CapApp.addListener('backButton', ({ canGoBack }) => {
       const { ui: u, mini: m, nav: n, path } = ref.current;
       if (m.focusOpen) { m.closeFocus(); return; }
+      const composer = document.querySelector<HTMLElement>('.add-scrim');
+      if (composer && !document.querySelector('.popover, .scrim')) { composer.click(); return; }
       if (document.querySelector('.popover, .scrim')) { esc(); return; }
       if (u.taskId) { u.openTask(null); return; }
       if (u.day) { u.openDay(null); return; }
@@ -137,7 +153,13 @@ export function NativeBridge() {
   // tapping a timer notification opens the focus timer
   useEffect(() => {
     if (!isNative) return;
-    const h = LocalNotifications.addListener('localNotificationActionPerformed', a => { if (a.notification.extra?.focus) ref.current.mini.openFocus(); });
+    const h = LocalNotifications.addListener('localNotificationActionPerformed', a => {
+      const x = a.notification.extra ?? {};
+      if (x.focus) { ref.current.mini.openFocus(); return; }
+      if (x.taskId && x.kind === 'reminder') { ref.current.nav('/my-day'); ref.current.ui.openTask(x.taskId); return; }
+      if (x.kind === 'reflection') { ref.current.nav('/journal/review'); return; }
+      if (x.kind === 'info') ref.current.nav('/journal');
+    });
     return () => { h.then(x => x.remove()); };
   }, []);
 
@@ -160,7 +182,7 @@ export function NativeBridge() {
           body: est ? (rem > 0 ? `Running · done by ${fmtClock(new Date(Date.now() + rem))} (${fmtMin(est)} estimate)` : `Running · over the ${fmtMin(est)} estimate`) : 'Running · no estimate',
           ongoing: true, autoCancel: false, smallIcon: 'ic_stat_timer', extra: { focus: true },
         }];
-        if (est && rem > 1000) list.push({
+        if (est && rem > 1000 && st.settings.notif.estimateUsedUp) list.push({
           id: ALARM_ID, channelId: 'timer-alarm', title: 'Estimate is up', body: `${running.title} · ${fmtMin(est)} estimate`,
           schedule: { at: new Date(Date.now() + rem), allowWhileIdle: true }, smallIcon: 'ic_stat_timer', extra: { focus: true },
         });
@@ -170,19 +192,35 @@ export function NativeBridge() {
     return () => { cancelled = true; };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // task reminders: scheduled on the phone so they ring even when the app is closed
+  const remindKey = st.settings.notif.taskReminder ? st.tasks
+    .filter(x => x.remindAt && !x.remindedAt && !x.finishedAt && !x.isSample && new Date(x.remindAt).getTime() > Date.now())
+    .map(x => `${x.id}@${x.remindAt}@${x.title}@${x.projectId}`).sort().join('|') : '';
+  useEffect(() => {
+    if (!isNative) return;
+    (async () => {
+      try {
+        const pending = await LocalNotifications.getPending();
+        const old = pending.notifications.filter(n => n.id >= REMIND_BASE && n.id < REMIND_BASE + 100000).map(n => ({ id: n.id }));
+        if (old.length) await LocalNotifications.cancel({ notifications: old });
+        if (!remindKey || !(await ensurePermission())) return;
+        const arch = archivedIds(st.projects);
+        const list = st.tasks.filter(x => x.remindAt && !x.remindedAt && !x.finishedAt && !x.isSample && isLive(x, arch) && new Date(x.remindAt).getTime() > Date.now());
+        if (!list.length) return;
+        await LocalNotifications.schedule({ notifications: list.slice(0, 60).map(x => {
+          const p = st.projectById(x.projectId);
+          return { id: notifIdFor(x.id, REMIND_BASE), channelId: 'reminders', title: `Reminder: ${x.title}`,
+            body: [p && !p.isInbox ? p.name : null, x.estimateMin ? `estimate ${fmtMin(totalEstimateMin(x))}` : null].filter(Boolean).join(' · ') || 'Tap to open the task',
+            schedule: { at: new Date(x.remindAt!), allowWhileIdle: true }, smallIcon: 'ic_stat_timer', extra: { taskId: x.id, kind: 'reminder' } };
+        }) });
+      } catch { /* nice-to-have */ }
+    })();
+  }, [remindKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return null;
 }
 
+const REMIND_BASE = 100000;
+
 const RUNNING_ID = 7000, ALARM_ID = 7001;
-let permission: Promise<boolean> | null = null;
-function ensurePermission() {
-  permission ??= (async () => {
-    let p = await LocalNotifications.checkPermissions();
-    if (p.display !== 'granted') p = await LocalNotifications.requestPermissions();
-    if (p.display !== 'granted') return false;
-    await LocalNotifications.createChannel({ id: 'timer-running', name: 'Running timer', description: 'Shows the task you are timing', importance: 2, visibility: 1, vibration: false });
-    await LocalNotifications.createChannel({ id: 'timer-alarm', name: 'Estimate is up', description: 'Alerts you when a task’s estimate runs out', importance: 5, visibility: 1, vibration: true });
-    return true;
-  })().catch(() => false);
-  return permission;
-}
+const ensurePermission = () => ensureNativeNotifs(true);

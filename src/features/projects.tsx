@@ -436,6 +436,7 @@ export function ProjectPage() {
   useEffect(() => setName(p?.name ?? ''), [p?.id, p?.name]);
   useEffect(() => { try { setViewS((localStorage.getItem(`ot-pview-${id}`) as 'list' | 'board') || 'list'); } catch { /* ignore */ } setFilter(EMPTY_FILTER); }, [id]);
   const all = useMemo(() => st.tasks.filter(t => t.projectId === id && t.status !== 'Archived'), [st.tasks, id]);
+  const phone = useIsMobile();
   if (!p) return <Empty icon="folder" title="Project not found" body="It may have been deleted on another device." action={<Btn kind="tonal" onClick={() => nav('/projects')}>All projects</Btn>} />;
   const tasks = applyTaskFilter(all, filter, st.settings);
   const pr = projectProgress(st.tasks, p);
@@ -463,7 +464,8 @@ export function ProjectPage() {
           <div className="title">
             <input className="inline-input t-hm" value={name} disabled={p.isInbox} aria-label="Project name" onChange={e => setName(e.target.value)} onBlur={() => name.trim() && name !== p.name ? st.updateProject(p.id, { name: name.trim() }) : setName(p.name)} onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} style={{ color: 'var(--on-surface)' }} />
           </div>
-          <div className="actions" style={{ gap: 16 }}>
+          {phone && <ProjectMore p={p} acts={acts} />}
+          <div className="actions proj-actions" style={{ gap: 16 }}>
             {p.isInbox
               ? <span className="t-ts">{pr.open} open {pr.open === 1 ? 'task' : 'tasks'}</span>
               : <div className="row gap-12">
@@ -473,7 +475,7 @@ export function ProjectPage() {
             <span style={{ width: 1, height: 32, background: 'var(--outline-variant)' }} />
             <FilterButton value={filter} onChange={setFilter} showMyDay />
             <Seg value={view} onChange={setView} items={[{ value: 'list', icon: 'list', tip: 'List' }, { value: 'board', icon: 'board', tip: 'Board' }]} />
-            <ProjectMore p={p} acts={acts} />
+            {!phone && <ProjectMore p={p} acts={acts} />}
           </div>
         </div>
         {!p.isInbox ? (

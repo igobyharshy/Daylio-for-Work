@@ -5,6 +5,7 @@ import type { BlockKind, Task, TimeBlock } from '../lib/types';
 import { Icon, type IconName } from '../ui/Icon';
 import { Btn, Chip, Field, IBtn, Popover, Seg, cx } from '../ui/kit';
 import { TimeInput } from '../ui/pickers';
+import { useIsMobile } from '../lib/native';
 import { useToast } from '../ui/Toast';
 import { archivedIds, inMyDay, isLive, realTasks } from '../lib/select';
 import {
@@ -114,7 +115,10 @@ export function TimelineView() {
     ro.observe(el); setWrapW(el.clientWidth);
     return () => ro.disconnect();
   }, []);
-  const hourW = Math.max(64, Math.floor((wrapW - LABEL_W - 2) / hours));
+  // phones: a narrow name column so most of the screen is the timeline itself
+  const phone = useIsMobile();
+  const labelW = phone ? 112 : LABEL_W;
+  const hourW = Math.max(phone ? 72 : 64, Math.floor((wrapW - labelW - 2) / hours));
   const laneW = hourW * hours;
   const X = (ms: number) => ((Math.max(r0, Math.min(r1, ms)) - r0) / H) * hourW;
   const rowH = mode === 'both' ? 54 : 44;
@@ -124,11 +128,11 @@ export function TimelineView() {
   const scrolledFor = useRef('');
   useLayoutEffect(() => {
     const el = scrollRef.current; if (!el) return;
-    const key = `${day}|${hourW}|${startH}`;
+    const key = `${day}|${hourW}|${startH}|${labelW}`;
     if (scrolledFor.current === key) return;
     scrolledFor.current = key;
     // start of the work day, unless that would leave "now" off-screen
-    const visible = ((el.clientWidth - LABEL_W) / hourW) * H;
+    const visible = ((el.clientWidth - labelW) / hourW) * H;
     let target = ws - 0.25 * H;
     if (isToday && now > target + visible - H) target = now - visible + H;
     if (isToday && now < target) target = now - 0.5 * H;
@@ -179,11 +183,17 @@ export function TimelineView() {
     }
     setDrag({ ...d, s, e: en, moved: true });
   };
-  const end = (_e: React.PointerEvent, onClick: () => void) => {
+  const end = (e: React.PointerEvent, onClick: () => void) => {
     const d = dragRef.current; setDrag(null);
     const dropOnPanel = overPanel; setOverPanel(false);
-    if (!d) return;
-    if (!d.moved) { onClick(); return; }
+    if (!d || e.type === 'pointercancel') return;
+    if (!d.moved) {
+      // opened on release: swallow the click that follows, or it lands on whatever just opened under the finger
+      const stop = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
+      window.addEventListener('click', stop, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 400);
+      onClick(); return;
+    }
     commit(d, dropOnPanel);
   };
 
@@ -317,9 +327,9 @@ export function TimelineView() {
         </div>
 
         {/* the timeline */}
-        <div ref={wrapRef} className="tl card" style={{ '--hw': hourW + 'px', '--label-w': LABEL_W + 'px' } as React.CSSProperties}>
+        <div ref={wrapRef} className="tl card" style={{ '--hw': hourW + 'px', '--label-w': labelW + 'px' } as React.CSSProperties}>
           <div className="tl-scroll" ref={scrollRef}>
-            <div className="tl-grid" style={{ width: LABEL_W + laneW }}>
+            <div className="tl-grid" style={{ width: labelW + laneW }}>
               <div className="tl-head">
                 <div className="tl-corner t-bs c-muted">{rows.length ? `${rows.length} ${rows.length === 1 ? 'item' : 'items'}` : ''}</div>
                 <div className="tl-hours" style={{ width: laneW }}>
@@ -339,7 +349,7 @@ export function TimelineView() {
 
               <div className="tl-body" onDragOver={onDragOver} onDragLeave={() => setDropAt(null)} onDrop={onDrop}>
                 {/* shading, now line, drop marker */}
-                <div ref={laneRef} className="tl-overlay" style={{ left: LABEL_W, width: laneW }}>
+                <div ref={laneRef} className="tl-overlay" style={{ left: labelW, width: laneW }}>
                   {ws > r0 && <i className="tl-off" style={{ left: 0, width: X(ws) }} />}
                   {we < r1 && <i className="tl-off" style={{ left: X(we), right: 0 }} />}
                   {isToday && now >= r0 && now <= r1 && <i className="tl-now" style={{ left: X(now) }} />}
@@ -347,7 +357,7 @@ export function TimelineView() {
                 </div>
 
                 {rows.length === 0 && (
-                  <div className="tl-empty t-bm c-muted" style={{ marginLeft: LABEL_W }}>
+                  <div className="tl-empty t-bm c-muted" style={{ marginLeft: phone ? 0 : labelW }}>
                     {mode === 'actual' ? 'No timer time on this day yet.' : 'Nothing planned yet. Drag a task from “To plan”, or add a meeting or break.'}
                   </div>
                 )}

@@ -6,7 +6,8 @@ import { Icon, type IconName } from '../ui/Icon';
 import { Btn, IBtn, MenuList, Pill, Popover, Switch, Tag, cx, useAnchor, PopOutBtn } from '../ui/kit';
 import { DuePicker, EstimateDialog } from '../ui/pickers';
 import { TimeLog } from './timelog';
-import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot } from './tasks';
+import { ProjectPicker, RemindPicker, OutcomeChips, useTaskActions, toneDot, TaskMenu } from './tasks';
+import { useIsMobile } from '../lib/native';
 import { statusTone, avgOverrunMin, tagChipTone } from '../lib/select';
 import { useMiniTimer } from './mini';
 import { useDragSort } from './dnd';
@@ -34,6 +35,8 @@ export function TaskDrawer({ t }: { t: Task }) {
   const [title, setTitle] = useState(t.title);
   const [note, setNote] = useState(t.note);
   const pla = useAnchor();
+  const ma = useAnchor();
+  const phone = useIsMobile();
   useEffect(() => { setTitle(t.title); setNote(t.note); }, [t.id]);
   useEffect(() => { if (document.activeElement?.getAttribute('aria-label') !== 'Task title') setTitle(t.title); }, [t.title]);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -66,8 +69,10 @@ export function TaskDrawer({ t }: { t: Task }) {
           <span className="t-tm ellipsis">{p?.name ?? 'Inbox'}</span>
           <Icon name="chevDown" />
         </button>
+        {phone && <IBtn icon="moreV" label="Task options" tip={false} kind={ma.isOpen ? 'selected' : 'standard'} onClick={e => ma.open(e)} />}
         <IBtn icon="close" label="Close" onClick={() => ui.openTask(null)} />
       </div>
+      {ma.isOpen && <TaskMenu t={t} anchor={ma.el} onClose={ma.close} />}
       <div className="sheet-body">
         {/* Title + steps in one card (To Do style) */}
         <div className="card title-card" style={{ background: 'var(--surface-lowest)' }}>
@@ -83,9 +88,20 @@ export function TaskDrawer({ t }: { t: Task }) {
           {done && <div className="row gap-8" style={{ flexWrap: 'wrap', padding: '2px 12px 10px 40px' }}><OutcomeChips t={t} /></div>}
         </div>
 
+        {/* phones: start the timer right here (desktop rows already have ▶) */}
+        {phone && !done && !t.firstStartedAt && !running && (
+          <button className="start-block state" onClick={() => act.start(t)}>
+            <span className="start-ic"><Icon name="play" /></span>
+            <span className="col grow" style={{ alignItems: 'flex-start' }}>
+              <span className="t-tm">Start timer</span>
+              <span className="t-bs c-muted">{t.estimateMin ? `Counts down your ${fmtMin(totalEstimateMin(t))} estimate` : 'You’ll be asked for an estimate first'}</span>
+            </span>
+          </button>
+        )}
+
         {/* Timer */}
         {!done && (t.firstStartedAt || running) && (
-          <div className="timer-block" style={{ background: amber ? 'var(--warning-container)' : 'var(--primary-container)', color: amber ? 'var(--on-warning-container)' : 'var(--on-primary-container)' }}>
+          <div className={cx('timer-block', phone && 'phone')} style={{ background: amber ? 'var(--warning-container)' : 'var(--primary-container)', color: amber ? 'var(--on-warning-container)' : 'var(--on-primary-container)' }}>
             <div className="row gap-8">
               <div className="col grow">
                 {(() => {
