@@ -1,0 +1,716 @@
+[
+{
+"code": "C01",
+"title": "My Day \u00b7 timer counting up",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "D-E01",
+"title": "My Day",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "D-E10",
+"title": "My Day \u00b7 estimate ran out",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "D-E16",
+"title": "Task drawer \u00b7 running, with time log",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "D-T01",
+"title": "My Day \u00b7 Timeline \u00b7 plan and actual",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "D-V02",
+"title": "My Day \u00b7 view options: groups and task details",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E01",
+"title": "My Day",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E02",
+"title": "My Day \u00b7 filter",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E03",
+"title": "Add a task (expanded)",
+"bundle": "b00",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E04",
+"title": "Add a task \u00b7 pick project",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E05",
+"title": "Add a task \u00b7 create project inline",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E06",
+"title": "Add a task \u00b7 due date and time",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E07",
+"title": "My Day \u00b7 task added",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E08",
+"title": "My Day \u00b7 timer running",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E10",
+"title": "My Day \u00b7 estimate ran out",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E11",
+"title": "What happened? (from the Now card)",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E12",
+"title": "Task drawer \u00b7 over estimate \u00b7 need more time",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E13",
+"title": "What happened \u00b7 pick reasons",
+"bundle": "b01",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E14",
+"title": "My Day \u00b7 done toast",
+"bundle": "b02",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E15",
+"title": "Finished over estimate \u00b7 toast",
+"bundle": "b02",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E16",
+"title": "Task drawer \u00b7 running, with time log",
+"bundle": "b02",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E17",
+"title": "Task drawer \u00b7 done, with time log",
+"bundle": "b02",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E18",
+"title": "Time log \u00b7 edit a stretch",
+"bundle": "b02",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E19",
+"title": "Task drawer \u00b7 add a step",
+"bundle": "b02",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E20",
+"title": "Task drawer \u00b7 remind me",
+"bundle": "b02",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E21",
+"title": "Task drawer \u00b7 due date",
+"bundle": "b03",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E24",
+"title": "Journal \u00b7 reflect on tasks",
+"bundle": "b03",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E25",
+"title": "Journal \u00b7 reflect \u00b7 snooze",
+"bundle": "b03",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E26",
+"title": "Journal \u00b7 calendar",
+"bundle": "b03",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E27",
+"title": "Journal \u00b7 tag filter",
+"bundle": "b03",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E28",
+"title": "Journal \u00b7 list",
+"bundle": "b03",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E29",
+"title": "Journal \u00b7 day panel",
+"bundle": "b03",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E30",
+"title": "Projects \u00b7 list",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E31",
+"title": "Projects \u00b7 gallery",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E32",
+"title": "Project page \u00b7 Motion reel",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E33",
+"title": "Project page \u00b7 task drawer",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E35",
+"title": "Inbox (default project)",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E36",
+"title": "Settings \u00b7 work day",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E37",
+"title": "Settings \u00b7 default tags",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E38",
+"title": "Insights \u00b7 overview",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "E39",
+"title": "New project",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F01",
+"title": "Task drawer \u00b7 not started",
+"bundle": "b04",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F02",
+"title": "Task drawer \u00b7 change project",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F04",
+"title": "Notifications",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F05",
+"title": "New journal entry \u00b7 linked to the task",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F06",
+"title": "Search",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F07",
+"title": "Journal \u00b7 new entry",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F08",
+"title": "Insights \u00b7 range",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F09",
+"title": "Project page \u00b7 Brand refresh",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F10",
+"title": "Project page \u00b7 filter",
+"bundle": "b05",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F12",
+"title": "Settings \u00b7 account",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "F13",
+"title": "Settings \u00b7 notifications",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G01",
+"title": "My Day \u00b7 board",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G02",
+"title": "Project page \u00b7 board",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G03",
+"title": "Projects \u00b7 board by status",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G04",
+"title": "My Day \u00b7 board \u00b7 dragging a card",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G06",
+"title": "Task drawer \u00b7 change status",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G07",
+"title": "Task drawer \u00b7 edit estimate",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G08",
+"title": "Add a task \u00b7 estimate",
+"bundle": "b06",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G10",
+"title": "Task drawer \u00b7 hover a field to edit",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G11",
+"title": "Settings \u00b7 statuses",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G12",
+"title": "Profile menu",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G13",
+"title": "Add a task \u00b7 remind me",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G14",
+"title": "New project \u00b7 pick an icon",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G15",
+"title": "New project \u00b7 pick a cover",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G16",
+"title": "New project \u00b7 dates",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G17",
+"title": "New project \u00b7 status",
+"bundle": "b07",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G19",
+"title": "Project page \u00b7 change status",
+"bundle": "b08",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "G20",
+"title": "Project page \u00b7 edit dates",
+"bundle": "b08",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "J01",
+"title": "Settings \u00b7 trackers",
+"bundle": "b08",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "J06",
+"title": "Journal \u00b7 daily check-in",
+"bundle": "b08",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "J09",
+"title": "Insights \u00b7 patterns",
+"bundle": "b08",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "L01",
+"title": "Time log \u00b7 add time you forgot to track",
+"bundle": "b08",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "L02",
+"title": "Time log \u00b7 older timer (breaks inside)",
+"bundle": "b08",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "L03",
+"title": "Time log \u00b7 timer reset (undo)",
+"bundle": "b09",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "MINI-dark-default-160x160",
+"title": "",
+"bundle": "b09",
+"w": 160,
+"h": 160
+},
+{
+"code": "MINI-dark-default-240x240-hover",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "MINI-dark-default-240x240",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "MINI-dark-default-360x220",
+"title": "",
+"bundle": "b09",
+"w": 360,
+"h": 220
+},
+{
+"code": "MINI-dark-over-240x240",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "MINI-dark-up-240x240",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "MINI-light-default-160x160",
+"title": "",
+"bundle": "b09",
+"w": 160,
+"h": 160
+},
+{
+"code": "MINI-light-default-240x240-hover",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "MINI-light-default-240x240",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "MINI-light-default-360x220",
+"title": "",
+"bundle": "b09",
+"w": 360,
+"h": 220
+},
+{
+"code": "MINI-light-over-240x240",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "MINI-light-up-240x240",
+"title": "",
+"bundle": "b09",
+"w": 240,
+"h": 240
+},
+{
+"code": "P01",
+"title": "Task drawer \u00b7 plan a time",
+"bundle": "b09",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T01",
+"title": "My Day \u00b7 Timeline \u00b7 plan and actual",
+"bundle": "b09",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T02",
+"title": "Timeline \u00b7 plan only",
+"bundle": "b09",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T03",
+"title": "Timeline \u00b7 actual only",
+"bundle": "b09",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T04",
+"title": "Timeline \u00b7 dragging a task onto the day",
+"bundle": "b09",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T05",
+"title": "Timeline \u00b7 add a meeting or break",
+"bundle": "b10",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T06",
+"title": "Timeline \u00b7 edit a block",
+"bundle": "b10",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T07",
+"title": "Timeline \u00b7 hover a bar",
+"bundle": "b10",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "T08",
+"title": "Timeline \u00b7 task drawer",
+"bundle": "b10",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "V01",
+"title": "My Day \u00b7 hover a row to see its details",
+"bundle": "b10",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "V02",
+"title": "My Day \u00b7 view options: groups and task details",
+"bundle": "b10",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "V03",
+"title": "My Day \u00b7 a group hidden from My Day",
+"bundle": "b11",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "V04",
+"title": "Settings \u00b7 status menu (show or hide in My Day)",
+"bundle": "b11",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "V05",
+"title": "Settings \u00b7 delete a status that tasks use",
+"bundle": "b11",
+"w": 1920,
+"h": 1080
+},
+{
+"code": "V06",
+"title": "My Day \u00b7 task details always shown",
+"bundle": "b11",
+"w": 1920,
+"h": 1080
+}
+]
