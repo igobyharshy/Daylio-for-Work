@@ -185,6 +185,23 @@ Phone layout below 720 px (bottom nav, mini player, focus timer, bottom sheets) 
 - Sign-up + onboarding for new people: docs/onboarding.md. Existing users are auto-marked done.
 - Phone: swipe right = done, left = tomorrow; long-press = menu / drag. Desktop: press N to add a task; Esc closes the side sheet.
 
+## 4d. Undo, pasting lists, row details, portrait, spell check (28 Nov)
+- **Undo / redo**: Ctrl/⌘+Z, Ctrl+Shift+Z or Ctrl+Y (`src/app/undo.ts`; history in `store.tsx`, last 50 steps).
+  Every store action is wrapped by `recorded()`; the first call snapshots projects/tasks/entries/blocks and ~0.7s
+  after the last call the changed rows become one step. Undo upserts the old rows (and cancels a pending
+  6.5s delete), and deletes rows the step added. Inside a text box the keys stay normal text undo.
+  Settings, notifications and check-ins are not in the history.
+- **Paste a list**: `src/ui/paste.tsx` (`splitPastedList`, `useListPaste`, `PastedList`). Multi-line paste in the task
+  composer (desktop + phone) or "Add a step" shows a numbered preview; Enter adds one task/step per line.
+  Bullets, numbers, checkboxes and headings are stripped; each line still understands "tomorrow 30m".
+- **Phone row details**: `settings.rowFields` (ordered `{id,on}`; `rowFields()` fills new ones in). View options
+  on the phone: eye to show/hide, arrows to reorder. `PhoneLine` renders the line; it never wraps and fades out
+  at the end (no sideways scroll: it would fight swipe-to-finish). Desktop keeps On hover / Always.
+- **Portrait**: AndroidManifest `screenOrientation="portrait"` (needs the new APK); PWA manifest orientation
+  portrait; in browsers a sideways phone keeps the phone layout (`MOBILE_MQ` + mobile.css media queries).
+- **Spell check**: `<html spellcheck="true" autocapitalize="sentences">` in index.html.
+- Test: `node tools/ui-test/features.mjs`.
+
 ## 5. How to work on a change (the routine)
 1. **Get the code.** If the repo isn't in the session, attach `igobyharshy/Daylio-for-Work` with push access, clone it, then run `npm ci`.
 2. **Make the change.** Keep to M3 tokens in `tokens.css`, and to existing components and patterns. Don't add new screens or flows beyond what Harshy asks for without checking with him.

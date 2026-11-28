@@ -11,7 +11,7 @@ export { cx };
 type BtnKind = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated' | 'error' | 'error-text' | 'warn' | 'warn-outlined';
 export const Btn = forwardRef<HTMLButtonElement, {
   kind?: BtnKind; icon?: IconName; trail?: IconName; children: ReactNode; onClick?: (e: React.MouseEvent) => void;
-  disabled?: boolean; className?: string; type?: 'button' | 'submit'; big?: boolean; title?: string;
+  disabled?: boolean; className?: string; type?: 'button' | 'submit'; big?: boolean; title?: string; onPointerDown?: (e: React.PointerEvent) => void;
 }>(function Btn({ kind = 'filled', icon, trail, children, className, big, type = 'button', ...rest }, ref) {
   return (
     <button ref={ref} type={type} className={cx('btn state', kind, icon && 'has-icon', trail && 'has-trail', big && 'big', className)} {...rest}>
@@ -24,7 +24,7 @@ export const Btn = forwardRef<HTMLButtonElement, {
 
 export const IBtn = forwardRef<HTMLButtonElement, {
   icon: IconName; label: string; kind?: 'standard' | 'tonal' | 'filled' | 'pc' | 'outlined' | 'selected'; onClick?: (e: React.MouseEvent) => void;
-  badge?: string | number | null; sm?: boolean; className?: string; style?: CSSProperties; disabled?: boolean; tip?: boolean;
+  badge?: string | number | null; sm?: boolean; className?: string; style?: CSSProperties; disabled?: boolean; tip?: boolean; onPointerDown?: (e: React.PointerEvent) => void;
 }>(function IBtn({ icon, label, kind = 'standard', badge, sm, className, tip = true, ...rest }, ref) {
   return (
     <button ref={ref} type="button" aria-label={label} data-tip={tip ? label : undefined} className={cx('ibtn state', kind !== 'standard' && kind, sm && 'sm', className)} {...rest}>

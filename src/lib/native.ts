@@ -8,7 +8,8 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 export const isNative = Capacitor.isNativePlatform();
 
 /** phone layout below this width (bottom nav, full-screen sheets, bottom-sheet menus) */
-export const MOBILE_MQ = '(max-width: 720px)';
+// a phone turned sideways in a browser keeps the phone layout (touch screen, short height); the Android app is locked to portrait
+export const MOBILE_MQ = '(max-width: 720px), (pointer: coarse) and (max-height: 500px)';
 const mq = typeof window !== 'undefined' ? window.matchMedia(MOBILE_MQ) : null;
 export const isMobileNow = () => !!mq?.matches;
 

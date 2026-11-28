@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
 import type { Project, Task, ID, Settings, Repeat } from '../lib/types';
+import { rowFields } from '../lib/types';
+import { PastedList, useListPaste } from '../ui/paste';
 import { Icon } from '../ui/Icon';
 import { Btn, Chip, Dialog, Seg, Field, IBtn, MenuList, Popover, Switch, Tag, cx, useAnchor, type MenuItemDef, TONES, PopOutBtn } from '../ui/kit';
 import { DuePicker, EstimateDialog, DateTimePicker, remindOptions } from '../ui/pickers';
@@ -161,20 +163,39 @@ function TimeChip({ t, now }: { t: Task; now: number }) {
 }
 
 /** Phone rows: at most one short line — the timer while it runs, else overdue, else a due time. */
-function PhoneLine({ t, now, overdue }: { t: Task; now: number; overdue: boolean }) {
-  const { settings } = useStore();
-  if (isDone(t)) return null;
+/** Phone rows: one quiet line under the title, made of the details chosen in View options (in that order).
+ *  It never wraps; what doesn't fit fades out at the end, so put the most useful detail first. */
+function PhoneLine({ t, now, overdue, showProject = true }: { t: Task; now: number; overdue: boolean; showProject?: boolean }) {
+  const st = useStore();
+  const { settings } = st;
+  const done = isDone(t);
   const running = !!t.runStartedAt;
+  const timing = running || (!done && t.elapsedMs > 0);
   const up = settings.timerDirection === 'up';
-  if (running || t.elapsedMs > 0) {
-    const paused = running ? '' : 'Paused · ';
-    if (!t.estimateMin) return <span className={cx('line tnum', running && 'primary')}>{paused}{fmtTimer(elapsed(t, now))} elapsed</span>;
-    if (isOverEstimate(t, now)) return <span className="line warn tnum">{paused}{fmtTimer(-remainingMs(t, now)).replace('+', '')} over estimate</span>;
-    return <span className={cx('line tnum', running && 'primary')}>{paused}{up ? timerView(t, now, 'up').line : `${fmtTimer(remainingMs(t, now))} left`}</span>;
+  const fields = rowFields(settings).filter(f => f.on).map(f => f.id);
+  const parts: ReactNode[] = [];
+  for (const f of fields) {
+    if (f === 'project') { const p = st.projectById(t.projectId); if (showProject && p) parts.push(<span key={f} className="lp proj"><span className="emo">{p.emoji}</span>{p.name}</span>); continue; }
+    if (done) continue;
+    if (f === 'timer' && timing) {
+      const paused = running ? '' : 'Paused · ';
+      if (!t.estimateMin) parts.push(<span key={f} className={cx('lp tnum', running && 'primary')}>{paused}{fmtTimer(elapsed(t, now))} elapsed</span>);
+      else if (isOverEstimate(t, now)) parts.push(<span key={f} className="lp warn tnum">{paused}{fmtTimer(-remainingMs(t, now)).replace('+', '')} over</span>);
+      else parts.push(<span key={f} className={cx('lp tnum', running && 'primary')}>{paused}{up ? timerView(t, now, 'up').line : `${fmtTimer(remainingMs(t, now))} left`}</span>);
+    }
+    if (f === 'due' && t.dueDate) {
+      if (overdue) parts.push(<span key={f} className="lp err">Overdue · {t.dueDate === todayISO() && t.dueTime ? `was due ${fmtClock(atTime(t.dueDate, t.dueTime))}` : `was due ${relDay(t.dueDate)}`}</span>);
+      else if (t.dueTime || t.dueDate !== todayISO()) parts.push(<span key={f} className="lp"><Icon name="event" size={14} />{cap(dueLabel(t)!.replace(/^due /i, ''))}</span>);
+    }
+    if (f === 'estimate' && t.estimateMin && !(timing && fields.includes('timer'))) parts.push(<span key={f} className="lp tnum"><Icon name="hourglass" size={14} />{fmtMin(totalEstimateMin(t))}</span>);
+    if (f === 'steps' && t.steps.length) parts.push(<span key={f} className="lp tnum"><Icon name="checklist" size={14} />{t.steps.filter(x => x.done).length}/{t.steps.length}</span>);
+    if (f === 'planned' && t.plannedStart) parts.push(<span key={f} className="lp"><Icon name="schedule" size={14} />{relDay(isoDate(new Date(t.plannedStart))) === 'today' ? '' : cap(relDay(isoDate(new Date(t.plannedStart)))) + ' '}{fmtClock(t.plannedStart)}</span>);
+    if (f === 'status') parts.push(<span key={f} className="lp"><span className="dot" style={{ background: toneDot(settings.taskStatuses.find(x => x.name === t.status)?.tone ?? 'neutral') }} />{t.status}</span>);
+    if (f === 'repeat' && t.repeat) parts.push(<span key={f} className="lp"><Icon name="repeat" size={14} />{repeatLabel(t.repeat, t.dueDate)}</span>);
+    if (f === 'remind' && t.remindAt && !t.remindedAt) parts.push(<span key={f} className="lp"><Icon name="bell" size={14} />{cap(relDay(isoDate(new Date(t.remindAt))))} {fmtClock(t.remindAt)}</span>);
   }
-  if (overdue && t.dueDate) return <span className="line err">Overdue · {t.dueDate === todayISO() && t.dueTime ? `was due ${fmtClock(atTime(t.dueDate, t.dueTime))}` : `was due ${relDay(t.dueDate)}`}</span>;
-  if (t.dueDate && (t.dueTime || t.dueDate !== todayISO())) return <span className="line">{dueLabel(t)}</span>;
-  return null;
+  if (!parts.length) return null;
+  return <span className="line plist">{parts.flatMap((x, i) => (i ? [<span key={'s' + i} className="sep" aria-hidden>·</span>, x] : [x]))}</span>;
 }
 
 /** Phone rows: swipe right to finish (or reopen), swipe left to move to tomorrow. Vertical swipes still scroll. */
@@ -243,8 +264,8 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
   const isFlash = flash?.id === t.id && Date.now() - flash.at < 1500;
   // calm rows: just the title; details fade in on hover. A live or paused timer stays visible.
   const calm = (st.settings.rowDetails ?? 'hover') === 'hover';
-  // phones: no hover, so calm rows show one quiet line with the single thing that matters right now
-  const phone = useIsMobile() && calm;
+  // phones: no hover, so rows stay calm: the title and one quiet line of the details picked in View options
+  const phone = useIsMobile();
   const swipe = useSwipe(() => act.toggleDone(t), done ? null : () => act.tomorrow(t));
   // touch: a long press that doesn't turn into a drag opens the task menu
   const rowRef = useRef<HTMLDivElement>(null);
@@ -276,11 +297,10 @@ export function TaskRow({ t, showProject = true, showSun = false, carry = false,
       </button>
       <div className="text">
         <span className="title clamp2">{t.title || 'Untitled task'}{t.repeat && !done && <Icon name="repeat" size={15} className="rep-ic" aria-label={repeatLabel(t.repeat, t.dueDate)} />}</span>
-        <PhoneLine t={t} now={now} overdue={overdue} />
+        <PhoneLine t={t} now={now} overdue={overdue} showProject={showProject} />
       </div>
       {!done && (
         <div className="trail" onClick={btnOnly}>
-          {!running && !t.elapsedMs && !!t.estimateMin && <span className="est">{fmtMin(totalEstimateMin(t))}</span>}
           {showSun && <IBtn icon={inMyDay ? 'sunFill' : 'sun'} label={inMyDay ? 'Remove from My Day' : 'Add to My Day'} tip={false} className={cx(inMyDay && 'on-primary')} onClick={() => act.toggleMyDay(t)} />}
           {running ? <IBtn icon="pause" kind="pc" label="Pause" tip={false} onClick={() => act.pause(t)} />
             : <IBtn icon="play" kind={t.elapsedMs ? 'pc' : 'standard'} className="play" label={t.elapsedMs ? 'Resume' : 'Start timer'} tip={false} onClick={() => act.start(t)} />}
@@ -501,6 +521,7 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   const [remind, setRemind] = useState<string | null>(null);
   const [myDay, setMyDay] = useState(inMyDay);
   const [rep, setRep] = useState<Repeat | null>(null);
+  const [bulk, setBulk] = useState<string[] | null>(null);
   const pa = useAnchor(), da = useAnchor(), ra = useAnchor(), rpa = useAnchor();
   const [estOpen, setEstOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -509,6 +530,8 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
   const project = st.projectById(proj ?? st.inbox?.id);
   const parsed = useMemo(() => parseQuickAdd(title), [title]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  // paste a list (Notion, ChatGPT, notes…): each line becomes its own task
+  useListPaste(inputRef, items => setBulk(b => [...(b ?? (title.trim() ? [title.trim()] : [])), ...items]), open);
   // desktop: press N anywhere (not while typing) to add a task
   useEffect(() => {
     if (phone) return;
@@ -526,14 +549,37 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
     const h = (e: PointerEvent) => {
       const t = e.target as HTMLElement;
       if (wrapRef.current?.contains(t) || t.closest('.popover') || t.closest('.scrim')) return;
-      if (!title.trim()) setOpen(false);
+      if (!title.trim() && !bulk) setOpen(false);
     };
     document.addEventListener('pointerdown', h);
     return () => document.removeEventListener('pointerdown', h);
-  }, [open, title, phone]);
+  }, [open, title, bulk, phone]);
   // the project stays as picked for the next task (handy when adding several)
-  const reset = () => { setTitle(''); setEst(null); setRemind(null); setRep(null); setDue({ date: todayISO(), time: null }); };
+  const reset = () => { setTitle(''); setEst(null); setRemind(null); setRep(null); setBulk(null); setDue({ date: todayISO(), time: null }); };
+  const submitBulk = (items: string[]) => {
+    // every line keeps the composer's project, due date, estimate and My Day; a line can still say "tomorrow 30m"
+    const base = st.tasks.reduce((m, x) => Math.max(m, x.sort), 0);
+    let first: Task | null = null, inMy = false;
+    items.forEach((line, i) => {
+      const q = parseQuickAdd(line);
+      const name = q.title.trim() || line;
+      let date = q.date ?? due.date;
+      const repeat = q.repeat ?? rep;
+      if (repeat) date = firstRepeatDate(repeat, date && date > todayISO() ? date : todayISO());
+      const addToMyDay = myDay && (!date || date <= todayISO());
+      inMy = inMy || addToMyDay;
+      const t = st.addTask({ title: name, projectId: proj ?? st.inbox?.id ?? null, dueDate: date, dueTime: q.date ? null : due.time, estimateMin: q.estimate ?? est, remindAt: remind,
+        myDayDate: addToMyDay ? todayISO() : repeat && myDay && date ? date : null, sort: base + 1 + i, ...(repeat ? { repeat: { ...pinRepeat(repeat, date), nextId: null } } : {}) });
+      first = first ?? t;
+    });
+    if (first) flashTask((first as Task).id);
+    const where = inMy && !projectId ? 'My Day' : project?.name ?? 'Inbox';
+    toast.show(`Added ${items.length} tasks to ${where}`, { icon: 'checkCircle', duration: 5000, action: { label: 'Undo', onClick: () => st.undo() } });
+    reset();
+    inputRef.current?.focus();
+  };
   const submit = () => {
+    if (bulk) return submitBulk(bulk);
     const name = parsed.title.trim();
     if (!name) return;
     const repeat = parsed.repeat ?? rep;
@@ -572,13 +618,14 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
       <div className="add-scrim" onClick={() => setOpen(false)} />
       <div className="add-panel phone" ref={wrapRef}>
         <div className="line">
-          <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="Add a task" aria-label="Task title" enterKeyHint="send"
-            onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setOpen(false); }} />
-          <button className="send" aria-label="Add task" disabled={!parsed.title.trim()} onPointerDown={e => e.preventDefault()} onClick={submit}><Icon name="arrowUp" /></button>
+          <input ref={inputRef} value={bulk ? '' : title} readOnly={!!bulk} onChange={e => setTitle(e.target.value)} placeholder={bulk ? `Send adds all ${bulk.length}` : 'Add a task'} aria-label="Task title" enterKeyHint="send"
+            onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { if (bulk) setBulk(null); else setOpen(false); } }} />
+          <button className="send" aria-label={bulk ? `Add ${bulk.length} tasks` : 'Add task'} disabled={!bulk && !parsed.title.trim()} onPointerDown={e => e.preventDefault()} onClick={submit}><Icon name="arrowUp" /></button>
         </div>
+        {bulk && <PastedList items={bulk} noun={['task', 'tasks']} onChange={setBulk} onAdd={submit} onCancel={() => { setBulk(null); inputRef.current?.focus(); }} />}
         {(parsed.date || parsed.estimate || parsed.repeat)
           ? <div className="hint">Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.repeat && repeatLabel(parsed.repeat).toLowerCase(), parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(', ')}.</div>
-          : !title && <div className="hint">Tip: type “Write brief tomorrow 45m” to set the day and estimate.</div>}
+          : !title && !bulk && <div className="hint">Tip: type “Write brief tomorrow 45m” to set the day and estimate. Paste a list to add several.</div>}
         <div className="chips">
           {!projectId && <Chip emoji={project?.emoji} onClick={e => pa.open(e)}>{project?.name ?? 'Inbox'}</Chip>}
           <Chip icon="event" sel={!!effDate} onClick={e => da.open(e)}>{dueText}</Chip>
@@ -595,10 +642,11 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
     <div className="add-panel" ref={wrapRef}>
       <div className="line">
         <Icon name="add" style={{ color: 'var(--primary)' }} />
-        <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="What do you need to do?  Try “Write brief tomorrow 45m”" aria-label="Task title"
-          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { reset(); setOpen(false); } }} />
-        <span className="t-bs c-muted row gap-6" style={{ whiteSpace: 'nowrap' }}><span className="keycap">↵</span>Add</span>
+        <input ref={inputRef} value={bulk ? '' : title} readOnly={!!bulk} onChange={e => setTitle(e.target.value)} placeholder={bulk ? `Press Enter to add all ${bulk.length}` : 'What do you need to do?  Try “Write brief tomorrow 45m”, or paste a list'} aria-label="Task title"
+          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { if (bulk) setBulk(null); else { reset(); setOpen(false); } } }} />
+        <span className="t-bs c-muted row gap-6" style={{ whiteSpace: 'nowrap' }}><span className="keycap">↵</span>Add{bulk ? ` ${bulk.length}` : ''}</span>
       </div>
+      {bulk && <PastedList items={bulk} noun={['task', 'tasks']} onChange={setBulk} onAdd={submit} onCancel={() => { setBulk(null); inputRef.current?.focus(); }} />}
       <div className="chips">
         {!projectId && <Chip emoji={project?.emoji} onClick={e => pa.open(e)}>{project?.name ?? 'Inbox'}</Chip>}
         <Chip icon="event" sel={!!effDate} onClick={e => da.open(e)} onRemove={effDate && !parsed.date ? () => setDue({ date: null, time: null }) : undefined}>{dueText}</Chip>
@@ -608,7 +656,7 @@ export function AddTaskBar({ projectId, label = 'Add a task', inMyDay = true }: 
         {!inMyDay && <Chip icon={myDay ? 'sunFill' : 'sun'} sel={myDay} onClick={() => setMyDay(!myDay)}>My Day</Chip>}
         <span className="grow" />
         <Btn kind="text" onClick={() => { reset(); setOpen(false); }}>Cancel</Btn>
-        <Btn disabled={!parsed.title.trim()} onClick={submit}>Add</Btn>
+        {!bulk && <Btn disabled={!parsed.title.trim()} onClick={submit}>Add</Btn>}
       </div>
       {(parsed.date || parsed.estimate || parsed.repeat) && <div className="t-bs c-muted" style={{ paddingLeft: 36 }}>Understood “{title.slice(parsed.title.length).trim()}” as {[parsed.repeat && repeatLabel(parsed.repeat).toLowerCase(), parsed.date && dueText.toLowerCase(), parsed.estimate && `a ${fmtMin(parsed.estimate)} estimate`].filter(Boolean).join(', ')}.</div>}
       {pickers}
@@ -677,11 +725,10 @@ function BoardCard({ t, showProject, now, drag, onOpen, act }: { t: Task; showPr
         </button>
         <span className="col grow" style={{ minWidth: 0, gap: 2, paddingTop: 6 }}>
           <span className={cx('kc-title clamp2', done && 'c-muted')} style={{ textDecoration: done ? 'line-through' : undefined }}>{t.title}</span>
-          <PhoneLine t={t} now={now} overdue={!done && !!t.dueDate && isOverdue(t, st.settings, now)} />
+          <PhoneLine t={t} now={now} overdue={!done && !!t.dueDate && isOverdue(t, st.settings, now)} showProject={showProject} />
         </span>
         {!done && (
           <span className="row" style={{ alignItems: 'center', paddingTop: 2 }} onClick={btnOnly}>
-            {!running && !t.elapsedMs && !!t.estimateMin && <span className="est">{fmtMin(totalEstimateMin(t))}</span>}
             {running ? <IBtn icon="pause" kind="pc" label="Pause" tip={false} onClick={() => act.pause(t)} /> : <IBtn icon="play" kind={t.elapsedMs ? 'pc' : 'standard'} className="play" label={t.elapsedMs ? 'Resume' : 'Start timer'} tip={false} onClick={() => act.start(t)} />}
           </span>
         )}

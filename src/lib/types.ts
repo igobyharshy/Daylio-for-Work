@@ -156,6 +156,8 @@ export interface Settings {
   myDayView: 'list' | 'board' | 'timeline';
   /** task rows: show project, dates, due and estimate only on hover (default) or always */
   rowDetails?: 'hover' | 'always';
+  /** phone rows: which details sit on the one quiet line under the title, in this order */
+  rowFields?: RowFieldPref[];
   /** timers count down from the estimate (default) or up towards it */
   timerDirection?: 'down' | 'up';
   /** Timeline: show the plan, what actually happened, or both */
@@ -174,6 +176,18 @@ export interface Settings {
   accent?: string;
   /** first-run journey state (src/features/onboarding.tsx); unset for people who started before it existed */
   onboarding?: Onboarding;
+}
+
+export type RowField = 'timer' | 'project' | 'due' | 'estimate' | 'steps' | 'planned' | 'status' | 'repeat' | 'remind';
+export interface RowFieldPref { id: RowField; on: boolean }
+export const DEFAULT_ROW_FIELDS: RowFieldPref[] = [
+  { id: 'timer', on: true }, { id: 'project', on: true }, { id: 'due', on: true }, { id: 'estimate', on: true },
+  { id: 'steps', on: false }, { id: 'planned', on: false }, { id: 'status', on: false }, { id: 'repeat', on: false }, { id: 'remind', on: false },
+];
+/** saved order first; details added in later versions join at the end with their default */
+export function rowFields(s: Pick<Settings, 'rowFields'>): RowFieldPref[] {
+  const saved = (s.rowFields ?? []).filter(f => DEFAULT_ROW_FIELDS.some(d => d.id === f.id));
+  return [...saved, ...DEFAULT_ROW_FIELDS.filter(d => !saved.some(f => f.id === d.id))];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -206,6 +220,7 @@ export const DEFAULT_SETTINGS: Settings = {
     quietOutsideWorkDay: true,
   },
   myDayView: 'list',
+  rowFields: DEFAULT_ROW_FIELDS,
   projectsView: 'list',
   journalView: 'calendar',
   trackers: DEFAULT_TRACKERS,

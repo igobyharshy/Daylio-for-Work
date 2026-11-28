@@ -68,6 +68,9 @@ export interface Store extends StoreState {
   updateSettings: (patch: Partial<Settings>) => void;
   setDisplayName: (name: string) => void;
   clearSample: () => Promise<void>;
+  /** step back / forward through recent changes (Ctrl+Z / Ctrl+Shift+Z). Returns what was undone, or null */
+  undo: () => string | null;
+  redo: () => string | null;
   hasSample: boolean;
   checkinFor: (day: string) => Checkin | undefined;
   saveCheckin: (day: string, values: TrackerValues) => void;
@@ -612,6 +615,80 @@ export function StoreProvider({ session, children }: { session: Session; childre
     }
   }, [write, userId]);
 
+  // ---------- undo history ----------
+  // Every user action marks the store; the first mark snapshots the lists, and ~0.7s after the last mark the
+  // snapshot is compared with the new state. The rows that changed become one undo step (a burst of edits,
+  // a bulk paste or a project delete with its tasks is one step). Undo writes the old rows back (upsert, so
+  // a row that was already deleted comes back too) and deletes rows the step added.
+  const hist = useRef({ undo: [] as UndoStep[], redo: [] as UndoStep[], open: null as Snap | null, timer: 0, applying: false });
+  const closeStep = useCallback(() => {
+    const h = hist.current;
+    window.clearTimeout(h.timer);
+    if (!h.open) return;
+    const changes = diffSnaps(h.open, snapOf(stateRef.current));
+    h.open = null;
+    if (!changes.length) return;
+    h.undo.push({ changes, label: describe(changes) });
+    if (h.undo.length > UNDO_LIMIT) h.undo.shift();
+    h.redo = [];
+  }, []);
+  const mark = useCallback(() => {
+    const h = hist.current;
+    if (h.applying) return;
+    if (!h.open) h.open = snapOf(stateRef.current);
+    window.clearTimeout(h.timer);
+    h.timer = window.setTimeout(closeStep, 700);
+  }, [closeStep]);
+  const applyRows = useCallback((changes: UndoChange[], useBefore: boolean) => {
+    const rowOf = (c: UndoChange) => (useBefore ? c.before : c.after);
+    setState(s => {
+      const next: any = { ...s };
+      for (const t of UNDO_TABLES) {
+        let list = s[t] as any[];
+        for (const c of changes) {
+          if (c.table !== t) continue;
+          const row = rowOf(c), id = (c.before ?? c.after).id;
+          list = row ? (list.some(x => x.id === id) ? list.map(x => (x.id === id ? row : x)) : [...list, row]) : list.filter(x => x.id !== id);
+        }
+        next[t] = list;
+      }
+      return next;
+    });
+    // a row coming back must not be deleted by a delete that is still waiting out its undo window
+    for (const c of changes) {
+      const row = rowOf(c);
+      if (!row) continue;
+      const key = ({ tasks: 't', entries: 'e', blocks: 'b', projects: 'p' } as const)[c.table] + row.id;
+      const tid = pending.current.get(key);
+      if (tid != null) { window.clearTimeout(tid); pending.current.delete(key); }
+    }
+    (async () => {
+      for (const t of UNDO_TABLES) for (const c of changes) {
+        const row = rowOf(c);
+        if (c.table === t && row) await write(supabase.from(DB_TABLE[t]).upsert({ ...TO_ROW[t](row), user_id: userId }));
+      }
+      for (const t of [...UNDO_TABLES].reverse()) for (const c of changes) {
+        if (c.table === t && !rowOf(c)) await write(supabase.from(DB_TABLE[t]).delete().eq('id', (c.before ?? c.after).id));
+      }
+    })();
+  }, [write, userId]);
+  const undo = useCallback(() => {
+    closeStep();
+    const h = hist.current, step = h.undo.pop();
+    if (!step) return null;
+    h.applying = true; applyRows(step.changes, true); h.applying = false;
+    h.redo.push(step);
+    return step.label;
+  }, [closeStep, applyRows]);
+  const redo = useCallback(() => {
+    closeStep();
+    const h = hist.current, step = h.redo.pop();
+    if (!step) return null;
+    h.applying = true; applyRows(step.changes, false); h.applying = false;
+    h.undo.push(step);
+    return step.label;
+  }, [closeStep, applyRows]);
+
   const store = useMemo<Store>(() => {
     const pMap = new Map(state.projects.map(p => [p.id, p]));
     const tMap = new Map(state.tasks.map(t => [t.id, t]));
@@ -620,14 +697,17 @@ export function StoreProvider({ session, children }: { session: Session; childre
       inbox: state.projects.find(p => p.isInbox),
       projectById: id => (id ? pMap.get(id) : undefined),
       taskById: id => (id ? tMap.get(id) : undefined),
-      addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, skipOccurrence, reEstimate, setFinishTime, setStatus, removeTask, removeEntry, removeProject,
-      setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock,
-      addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead,
-      updateSettings, setDisplayName, clearSample, saveCheckin, skipCheckin,
+      // user actions are recorded for undo
+      ...recorded(mark, {
+        addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, skipOccurrence, reEstimate, setFinishTime, setStatus, removeTask, removeEntry, removeProject,
+        setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock,
+        addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry,
+      }),
+      addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample, saveCheckin, skipCheckin, undo, redo,
       checkinFor: (day: string) => state.checkins.find(c => c.day === day),
       hasSample: state.projects.some(p => p.isSample) || state.tasks.some(t => t.isSample) || state.entries.some(e => e.isSample) || state.checkins.some(c => c.isSample),
     };
-  }, [state, setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, skipOccurrence, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
+  }, [state, mark, undo, redo, setStartTime, editSession, saveLog, resetTimer, planTask, addBlock, updateBlock, removeBlock, setStatus, removeTask, removeEntry, removeProject, saveCheckin, skipCheckin, addTask, updateTask, deleteTask, startTask, pauseTask, finishTask, reopenTask, skipOccurrence, reEstimate, setFinishTime, addProject, updateProject, deleteProject, addEntry, updateEntry, deleteEntry, addNotif, markNotifsRead, updateSettings, setDisplayName, clearSample]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
@@ -646,4 +726,45 @@ export function useNow(ms = 1000, active = true) {
     return () => clearInterval(t);
   }, [ms, active]);
   return now;
+}
+
+// ---------- undo helpers ----------
+const UNDO_LIMIT = 50;
+const UNDO_TABLES = ['projects', 'tasks', 'entries', 'blocks'] as const;
+type UndoTable = typeof UNDO_TABLES[number];
+type Snap = Pick<StoreState, UndoTable>;
+interface UndoChange { table: UndoTable; before: any | null; after: any | null }
+interface UndoStep { changes: UndoChange[]; label: string }
+const DB_TABLE: Record<UndoTable, string> = { projects: 'projects', tasks: 'tasks', entries: 'journal_entries', blocks: 'time_blocks' };
+const TO_ROW: Record<UndoTable, (x: any) => any> = { projects: projectToRow, tasks: taskToRow, entries: entryToRow, blocks: blockToRow };
+const snapOf = (s: StoreState): Snap => ({ projects: s.projects, tasks: s.tasks, entries: s.entries, blocks: s.blocks });
+function diffSnaps(a: Snap, b: Snap): UndoChange[] {
+  const out: UndoChange[] = [];
+  for (const t of UNDO_TABLES) {
+    if (a[t] === b[t]) continue;
+    const am = new Map((a[t] as any[]).map(x => [x.id, x])), bm = new Map((b[t] as any[]).map(x => [x.id, x]));
+    for (const id of new Set([...am.keys(), ...bm.keys()])) {
+      const x = am.get(id) ?? null, y = bm.get(id) ?? null;
+      if (x === y) continue;
+      if (x && y && JSON.stringify(x) === JSON.stringify(y)) continue;
+      out.push({ table: t, before: x, after: y });
+    }
+  }
+  return out;
+}
+function describe(changes: UndoChange[]): string {
+  const main = changes.find(c => c.table === 'projects' && (!c.before || !c.after)) ?? changes.find(c => c.table === 'tasks') ?? changes[0];
+  const row = main.after ?? main.before;
+  const raw = row.title ?? row.name ?? (row.body ? String(row.body).split('\n')[0] : '') ?? '';
+  const name = raw ? `“${raw.length > 32 ? raw.slice(0, 31) + '…' : raw}”` : ({ tasks: 'a task', projects: 'a project', entries: 'a journal entry', blocks: 'a time block' } as const)[main.table];
+  const verb = !main.before ? 'adding' : !main.after ? 'deleting' : 'changes to';
+  const same = changes.filter(c => c.table === main.table && !c.before === !main.before && !c.after === !main.after).length;
+  if (same > 1 && !main.before) return `adding ${same} ${main.table === 'tasks' ? 'tasks' : 'items'}`;
+  return `${verb} ${name}`;
+}
+/** wrap each action so calling it marks an undo step */
+function recorded<T extends Record<string, (...a: any[]) => any>>(mark: () => void, fns: T): T {
+  const out: any = {};
+  for (const k in fns) out[k] = (...a: any[]) => { mark(); return fns[k](...a); };
+  return out;
 }

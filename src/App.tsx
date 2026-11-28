@@ -21,6 +21,7 @@ import { TaskDrawer } from './features/drawer';
 import { MiniTimerProvider } from './features/mini';
 import { OnboardingGate } from './features/onboarding';
 import { useAutoUpdate } from './app/update';
+import { useUndoKeys } from './app/undo';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -75,6 +76,7 @@ function Shell() {
   useApplyTheme(st.settings.theme ?? 'light');
   useApplyAccent(st.settings.accent ?? 'purple');
   useAutoUpdate();
+  useUndoKeys();
   useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [loc.pathname]);
   // close the side sheets when the page changes
   useEffect(() => { ui.closeSheetsIfStale(); }, [loc.pathname]); // eslint-disable-line

@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { useUI } from '../app/ui';
-import { Icon } from '../ui/Icon';
+import { Icon, type IconName } from '../ui/Icon';
 import { Btn, IBtn, Popover, Seg, Switch, cx, useAnchor } from '../ui/kit';
 import { AddTaskBar, FilterButton, FilterChips, NothingRunning, ProjectLabel, RunCard, TaskBoard, TaskGroups, applyTaskFilter, EMPTY_FILTER, DueText, toneDot, type TaskFilter } from './tasks';
 import { activeTask, archivedIds, hiddenTasks, isLive, myDayTasks, shownInMyDay } from '../lib/select';
-import { CORE_STATUSES } from '../lib/types';
+import { CORE_STATUSES, rowFields, type RowField, type RowFieldPref } from '../lib/types';
 import { fmtDayLong, isDone, isOverdue, todayISO } from '../lib/time';
 import { useMiniTimer } from './mini';
 import { SampleBanner } from './common';
@@ -48,7 +48,7 @@ export function MyDayPage() {
           <Icon name="eyeOff" size={18} /><span>{hidden.length} hidden in {hiddenNames.join(', ')}</span>
         </button>
       )}
-      {va.isOpen && <ViewOptions anchor={va.el} onClose={va.close} showRows={view === 'list'} phoneView={{ view, filter, setFilter }} />}
+      {va.isOpen && <ViewOptions anchor={va.el} onClose={va.close} showRows={view !== 'timeline'} phoneView={{ view, filter, setFilter }} />}
       <div className="grow" />
       <div className="bottom-bar"><AddTaskBar /></div>
     </>
@@ -132,11 +132,13 @@ function ViewOptions({ anchor, onClose, showRows, phoneView }: { anchor: HTMLEle
         </>}
         {showRows && <>
           <div className="divider" style={{ margin: '8px 0' }} />
+          {phoneView ? <RowFieldsEditor /> : <>
           <span className="t-ts" style={{ padding: '0 16px' }}>Task details</span>
-          <span className="t-bs c-muted" style={{ padding: '2px 16px 8px' }}>{phoneView ? 'Calm shows one line: the timer, overdue or a due time.' : 'Project, dates, due and estimate on each row.'}</span>
+          <span className="t-bs c-muted" style={{ padding: '2px 16px 8px' }}>Project, dates, due and estimate on each row.</span>
           <div style={{ padding: '0 16px 4px' }}>
-            <Seg value={st.settings.rowDetails ?? 'hover'} onChange={v => st.updateSettings({ rowDetails: v })} items={phoneView ? [{ value: 'hover', label: 'Calm' }, { value: 'always', label: 'All details' }] : [{ value: 'hover', label: 'On hover' }, { value: 'always', label: 'Always' }]} />
+            <Seg value={st.settings.rowDetails ?? 'hover'} onChange={v => st.updateSettings({ rowDetails: v })} items={[{ value: 'hover', label: 'On hover' }, { value: 'always', label: 'Always' }]} />
           </div>
+          </>}
         </>}
         <div className="divider" style={{ margin: '8px 0 4px' }} />
         <div className={cx('row')} style={{ padding: '0 8px' }}>
@@ -188,3 +190,37 @@ function PlanLine() {
 const filterOn = (f: TaskFilter) => JSON.stringify(f) !== JSON.stringify(EMPTY_FILTER);
 /** "Thu 26 Nov" — short enough for one line on a phone */
 const fmtDayShortish = () => new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+const FIELD_INFO: Record<RowField, { label: string; icon: IconName }> = {
+  timer: { label: 'Timer', icon: 'timer' }, project: { label: 'Project', icon: 'folder' }, due: { label: 'Due', icon: 'event' },
+  estimate: { label: 'Estimate', icon: 'hourglass' }, steps: { label: 'Steps', icon: 'checklist' }, planned: { label: 'Planned time', icon: 'schedule' },
+  status: { label: 'Status', icon: 'flag' }, repeat: { label: 'Repeat', icon: 'repeat' }, remind: { label: 'Reminder', icon: 'bell' },
+};
+/** phones: pick which details sit on the line under each task title, and their order (eye = show / hide) */
+function RowFieldsEditor() {
+  const st = useStore();
+  const list = rowFields(st.settings);
+  const save = (next: RowFieldPref[]) => st.updateSettings({ rowFields: next });
+  const move = (i: number, d: -1 | 1) => { const n = [...list]; const [x] = n.splice(i, 1); n.splice(i + d, 0, x); save(n); };
+  return (
+    <>
+      <span className="t-ts" style={{ padding: '0 16px' }}>Show on each task</span>
+      <span className="t-bs c-muted" style={{ padding: '2px 16px 6px' }}>One quiet line under the title. Put what matters most first: the end fades out if it’s long.</span>
+      <div className="rf-list">
+        {list.map((f, i) => {
+          const info = FIELD_INFO[f.id];
+          return (
+            <div key={f.id} className={cx('rf-row', !f.on && 'off')}>
+              <IBtn icon={f.on ? 'eye' : 'eyeOff'} label={`${f.on ? 'Hide' : 'Show'} ${info.label.toLowerCase()}`} tip={false} className={cx(f.on && 'on')}
+                onClick={() => save(list.map(x => (x.id === f.id ? { ...x, on: !x.on } : x)))} />
+              <Icon name={info.icon} size={18} className="rf-ic" />
+              <span className="t-bm grow">{info.label}</span>
+              <IBtn sm icon="chevUp" label={`Move ${info.label.toLowerCase()} up`} tip={false} disabled={i === 0} onClick={() => move(i, -1)} />
+              <IBtn sm icon="chevDown" label={`Move ${info.label.toLowerCase()} down`} tip={false} disabled={i === list.length - 1} onClick={() => move(i, 1)} />
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}

@@ -81,7 +81,10 @@ export function createMock({ fresh = false } = {}) {
     const body = req.postDataJSON();
     if (method === 'POST') {
       const list = (Array.isArray(body) ? body : [body]).map(r => defaults(table, r));
-      rows.push(...list);
+      if (prefer.includes('merge-duplicates')) {
+        // upsert: replace rows with the same id
+        for (const r of list) { const i = rows.findIndex(x => x.id === r.id); if (i >= 0) rows[i] = { ...rows[i], ...r }; else rows.push(r); }
+      } else rows.push(...list);
       if (prefer.includes('return=representation')) return json(201, accept.includes('vnd.pgrst.object') ? list[0] : list);
       return route.fulfill({ status: 201, headers: { 'access-control-allow-origin': '*' } });
     }

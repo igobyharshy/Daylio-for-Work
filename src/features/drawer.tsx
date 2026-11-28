@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore, useNow } from '../lib/store';
 import { useUI } from '../app/ui';
 import type { Step, Task } from '../lib/types';
+import { PastedList, useListPaste } from '../ui/paste';
 import { Icon, type IconName } from '../ui/Icon';
 import { Btn, IBtn, MenuList, Pill, Popover, Switch, Tag, cx, useAnchor, PopOutBtn } from '../ui/kit';
 import { DuePicker, EstimateDialog } from '../ui/pickers';
@@ -245,7 +246,14 @@ function Steps({ t }: { t: Task }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ id: string; el: HTMLElement } | null>(null);
   const save = (steps: Step[]) => st.updateTask(t.id, { steps });
-  const add = () => { if (!text.trim()) return; save([...t.steps, { id: uid(), title: text.trim(), done: false }]); setText(''); };
+  const [bulk, setBulk] = useState<string[] | null>(null);
+  const addRef = useRef<HTMLInputElement>(null);
+  const add = () => {
+    if (bulk) { save([...t.steps, ...bulk.map(title => ({ id: uid(), title, done: false }))]); setBulk(null); setText(''); return; }
+    if (!text.trim()) return; save([...t.steps, { id: uid(), title: text.trim(), done: false }]); setText('');
+  };
+  // paste a list: each line becomes a step
+  useListPaste(addRef, items => setBulk(b => [...(b ?? (text.trim() ? [text.trim()] : [])), ...items]));
   const promote = (s: Step) => {
     st.addTask({ title: s.title, projectId: t.projectId, myDayDate: t.myDayDate, dueDate: t.dueDate });
     save(t.steps.filter(x => x.id !== s.id));
@@ -281,9 +289,10 @@ function Steps({ t }: { t: Task }) {
       </div>
       <div className="step-add">
         <Icon name="add" />
-        <input className="inline-input t-bm" placeholder={t.steps.length ? 'Next step' : 'Add a step'} value={text} onChange={e => setText(e.target.value)} aria-label="Add a step"
-          onKeyDown={e => { if (e.key === 'Enter') add(); }} onBlur={add} />
+        <input ref={addRef} className="inline-input t-bm" placeholder={bulk ? `Press Enter to add all ${bulk.length}` : t.steps.length ? 'Next step' : 'Add a step'} value={bulk ? '' : text} readOnly={!!bulk} onChange={e => setText(e.target.value)} aria-label="Add a step" enterKeyHint="done"
+          onKeyDown={e => { if (e.key === 'Enter') add(); if (e.key === 'Escape' && bulk) { e.stopPropagation(); setBulk(null); } }} onBlur={() => { if (!bulk) add(); }} />
       </div>
+      {bulk && <PastedList items={bulk} noun={['step', 'steps']} onChange={setBulk} onAdd={add} onCancel={() => setBulk(null)} />}
       {menu && (() => { const s = t.steps.find(x => x.id === menu.id); if (!s) return null; return (
         <Popover anchor={menu.el} onClose={() => setMenu(null)} placement="below-end">
           <MenuList width={220} onClose={() => setMenu(null)} items={[

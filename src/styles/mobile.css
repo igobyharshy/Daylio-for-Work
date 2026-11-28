@@ -50,7 +50,7 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .focus-play { width: 64px; height: 64px; border-radius: 22px; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   html { -webkit-text-size-adjust: 100%; }
   body { overscroll-behavior: none; }
   .loading, .signin { height: 100dvh; }
@@ -185,7 +185,7 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .tl-panel { max-height: 240px; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .page-head .actions { margin-left: auto; }
   .nothing-running { display: block; line-height: 22px; }
   .nothing-running .icon { display: inline-block; vertical-align: -4px; margin-right: 4px; }
@@ -195,14 +195,14 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .jcal-toolbar .jcal-legend { display: none; }
   .content .field.sm { max-width: 100%; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* side-by-side settings cards stack */
   .content .row.gap-24:not(.t-bm) { flex-direction: column; align-items: stretch !important; gap: 16px; }
   .content .row.gap-24:not(.t-bm) > .grow { flex-basis: auto !important; width: 100%; }
 }
 
 /* ---------- Phone My Day: calm (26 Nov, round 2) ---------- */
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .content { gap: 16px; }
   .page-head { min-height: 56px; }
   .page-head .title .t-bm { font-size: 13px; line-height: 18px; }
@@ -256,7 +256,7 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
 }
 
 /* ---------- round 3 (26 Nov evening): pickers, composer, keyboard ---------- */
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* date pickers in sheets use the full width: big, evenly spaced days */
   .as-sheet .menu.picker { padding: 4px 20px 12px !important; gap: 12px !important; }
   .as-sheet .menu.picker > .t-lm { font: 500 16px/24px var(--font); color: var(--on-surface); padding: 0 4px !important; }
@@ -288,7 +288,7 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   /* keyboard up: give it the room */
   html.kb .m-nav, html.kb .m-player { display: none; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* timeline first, then the tasks still to plan */
   .tl-layout .tl-panel { order: 2; }
   .tl-label { padding: 0 8px 0 10px; gap: 6px; }
@@ -300,7 +300,7 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .tl-bar .h { width: 14px; }
   .tl-panel > .row:first-child { padding: 4px 4px 0 4px !important; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* drawer timer: time on top, buttons underneath */
   .timer-block.phone > .row:first-child { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
   .timer-block.phone > .row:first-child > .col.grow { flex: 1 1 100%; }
@@ -308,7 +308,7 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   /* the snackbar moves to the top while a sheet, dialog or the composer is open, so it never covers them */
   body:has(.add-panel.phone, .popover.as-sheet, .scrim, .m-app .sheet) .snackbar { bottom: auto; top: calc(var(--sat) + 8px); }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* project page: name + ⋮ on one line, progress · filter · view underneath */
   .page-head .title .inline-input.t-hm { font: 500 24px/32px var(--font); }
   .page-head:has(.proj-actions) .title { flex: 1 1 calc(100% - 56px); }
@@ -317,14 +317,14 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .proj-actions > .row.gap-12 { margin-right: auto; }
   .breadcrumb { font-size: 13px; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* extended FAB for the page's main action (Journal → New entry) */
   .fab-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; pointer-events: none; padding-top: 8px; z-index: 5; }
   .fab { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; height: 56px; padding: 0 20px 0 16px; border-radius: 16px;
     background: var(--primary-container); color: var(--on-primary-container); font: 500 15px/20px var(--font); box-shadow: var(--elev-3); }
   .fab .icon { width: 24px; height: 24px; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* side-by-side cards with equal widths stack (Insights, Settings) */
   .content .row:has(> .grow[style*='flex-basis: 0']) { flex-direction: column; align-items: stretch !important; }
   .content .row:has(> .grow[style*='flex-basis: 0']) > .grow { flex-basis: auto !important; width: 100%; }
@@ -336,12 +336,12 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
   .trk-row .vpill { display: none; }
   .trk-row .t-bm { font-size: 13px; line-height: 18px; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .kb-hint { display: none; }
   .drag-ghost.lifted { transform: scale(1.03); transition: transform 120ms var(--ease); }
   body.is-dragging { -webkit-user-select: none; user-select: none; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .kcard.phone { padding: 8px 4px 8px 6px; gap: 0; border-radius: 16px; min-height: 60px; }
   .kcard.phone .kc-title { font: 400 15px/21px var(--font); }
   .kcard.phone .line { font: 400 13px/18px var(--font); color: var(--on-surface-variant); }
@@ -355,14 +355,14 @@ html.native input, html.native textarea, html.native [contenteditable] { -webkit
 /* while dragging, sticky bars never block the drop target under the finger */
 body.is-dragging .bottom-bar, body.is-dragging .fab-bar, body.is-dragging .snackbar { pointer-events: none; }
 body.is-dragging .board { scroll-snap-type: none; }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .trk-tags .trk-spacer, .trk-tags > span[style*='width: 32'] { display: none; }
   .trk-arch { flex-wrap: wrap; text-align: left; }
   .notif-banner { flex-wrap: wrap; padding: 14px 16px !important; }
   .notif-banner > .t-bm { flex: 1 1 calc(100% - 44px); }
   .notif-banner > .btn { margin-left: auto; }
 }
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   /* swipe a row: right = done, left = tomorrow */
   .task-row.phone { position: relative; touch-action: pan-y; overflow: hidden; }
   .task-row.phone > * { transition: transform 180ms var(--ease); }
@@ -376,4 +376,23 @@ body.is-dragging .board { scroll-snap-type: none; }
   .task-row.phone.swipe-r.armed::before { color: var(--on-primary); }
   .task-row.phone.swipe-l::before { content: 'Tomorrow →'; right: 18px; color: var(--on-secondary-container); }
   .task-row.phone.swipe-l.armed { background: color-mix(in srgb, var(--on-secondary-container) 22%, var(--secondary-container)); }
+}
+
+/* phone rows: the details line (View options → Show on each task). One line, fades out at the end. */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .task-row.phone .line.plist, .kcard.phone .line.plist { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; min-width: 0;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .plist .lp { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+  .plist .lp svg { opacity: 0.8; }
+  .plist .lp.primary { color: var(--primary); font-weight: 500; }
+  .plist .lp.warn { color: var(--warning); font-weight: 500; }
+  .plist .lp.err { color: var(--error); }
+  .plist .lp .emo { font-size: 12px; margin-right: 1px; }
+  .plist .lp .dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 2px; }
+  .plist .sep { flex: none; opacity: 0.6; }
+  .rf-list { display: flex; flex-direction: column; padding: 0 8px 4px; }
+  .rf-row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding-right: 4px; border-radius: 12px; }
+  .rf-row .ibtn.on { color: var(--primary); }
+  .rf-row.off .rf-ic, .rf-row.off .t-bm { opacity: 0.45; }
+  .rf-row .rf-ic { color: var(--on-surface-variant); }
 }
